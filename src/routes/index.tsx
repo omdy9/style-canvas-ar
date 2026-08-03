@@ -42,9 +42,8 @@ function Index() {
             <span className="gold-text">before you wear it.</span>
           </h1>
           <p className="mt-5 text-base leading-relaxed text-muted-foreground">
-            Real-time body tracking places garments and accessories on you as you move — shades on
-            your face, a chain at your neck, a watch on your wrist. Everything runs privately on
-            your device.
+            Hold a garment up to your camera and it's scanned into your wardrobe. Every saved piece
+            joins the carousel below, ready to be worn on your body in real time with AR tracking.
           </p>
         </section>
 
