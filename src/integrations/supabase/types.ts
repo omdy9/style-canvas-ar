@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      wardrobe_items: {
+        Row: {
+          anchor: string
+          category: string
+          color: string
+          created_at: string
+          id: string
+          image_url: string
+          name: string
+        }
+        Insert: {
+          anchor?: string
+          category?: string
+          color?: string
+          created_at?: string
+          id?: string
+          image_url: string
+          name: string
+        }
+        Update: {
+          anchor?: string
+          category?: string
+          color?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
