@@ -1,24 +1,73 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, ClientOnly } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
+const ARTryOn = lazy(() => import("@/components/ar/ARTryOn"));
+
+const title = "StyleAR — See Your Style Before You Wear It";
+const description =
+  "Virtually try on clothing and accessories in real time with AR body tracking. Step in front of your camera and style your look instantly.";
+
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <main className="min-h-screen bg-background">
+      <div className="pointer-events-none fixed inset-0 opacity-60 [background:radial-gradient(60%_50%_at_50%_0%,oklch(0.75_0.12_85/0.16),transparent_70%)]" />
+      <div className="relative mx-auto max-w-6xl px-5 py-10 sm:py-16">
+        <header className="lux-fade flex items-center justify-between">
+          <span className="text-lg font-semibold tracking-[0.3em]">
+            STYLE<span className="gold-text">AR</span>
+          </span>
+          <span className="hidden text-xs uppercase tracking-[0.25em] text-muted-foreground sm:block">
+            AR Try-On Prototype
+          </span>
+        </header>
+
+        <section className="lux-fade mt-12 max-w-2xl">
+          <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
+            See your style
+            <br />
+            <span className="gold-text">before you wear it.</span>
+          </h1>
+          <p className="mt-5 text-base leading-relaxed text-muted-foreground">
+            Real-time body tracking places garments and accessories on you as you move — shades on
+            your face, a chain at your neck, a watch on your wrist. Everything runs privately on
+            your device.
+          </p>
+        </section>
+
+        <section className="mt-10">
+          <ClientOnly
+            fallback={
+              <div className="glass h-[520px] animate-pulse rounded-3xl" aria-hidden="true" />
+            }
+          >
+            <Suspense
+              fallback={
+                <div className="glass h-[520px] animate-pulse rounded-3xl" aria-hidden="true" />
+              }
+            >
+              <ARTryOn />
+            </Suspense>
+          </ClientOnly>
+        </section>
+
+        <footer className="mt-16 border-t border-border pt-6 text-xs text-muted-foreground">
+          StyleAR — on-device pose tracking. No video ever leaves your browser.
+        </footer>
+      </div>
+    </main>
   );
 }
