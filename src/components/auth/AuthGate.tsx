@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 
 /** Wardrobe data is private per person, so these surfaces require a session. */
 export default function AuthGate({ children }: { children: ReactNode }) {
@@ -40,15 +39,6 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       toast.error(err instanceof Error ? err.message : "Couldn't sign you in.");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const google = async () => {
-    try {
-      await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-    } catch (err) {
-      console.error(err);
-      toast.error("Google sign-in failed.");
     }
   };
 
@@ -106,12 +96,6 @@ export default function AuthGate({ children }: { children: ReactNode }) {
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
         </button>
       </form>
-      <button
-        onClick={google}
-        className="mt-3 w-full rounded-full border border-border px-6 py-2.5 text-sm transition hover:bg-secondary"
-      >
-        Continue with Google
-      </button>
       <button
         onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
         className="mt-4 w-full text-xs text-muted-foreground underline-offset-4 hover:underline"
