@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 
 const ARTryOn = lazy(() => import("@/components/ar/ARTryOn"));
 const StylistSearch = lazy(() => import("@/components/stylist/StylistSearch"));
+const AuthGate = lazy(() => import("@/components/auth/AuthGate"));
 
 const title = "StyleAR — See Your Style Before You Wear It";
 const description =
@@ -59,7 +60,9 @@ function Index() {
                 <div className="glass h-[520px] animate-pulse rounded-3xl" aria-hidden="true" />
               }
             >
-              <ARTryOn />
+              <AuthGate>
+                <ARTryOn />
+              </AuthGate>
             </Suspense>
           </ClientOnly>
         </section>
@@ -75,7 +78,9 @@ function Index() {
           <div className="mt-6">
             <ClientOnly fallback={<div className="glass h-24 animate-pulse rounded-full" />}>
               <Suspense fallback={<div className="glass h-24 animate-pulse rounded-full" />}>
-                <StylistSearch />
+                <AuthGate>
+                  <StylistSearch />
+                </AuthGate>
               </Suspense>
             </ClientOnly>
           </div>
