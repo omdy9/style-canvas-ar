@@ -53,7 +53,11 @@ export async function addWardrobeItem(input: {
   color: string;
   blob: Blob;
 }) {
-  const path = `${crypto.randomUUID()}.png`;
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Sign in to save pieces to your wardrobe.");
+
+  const path = `${userId}/${crypto.randomUUID()}.png`;
   const up = await supabase.storage.from("wardrobe").upload(path, input.blob, {
     contentType: "image/png",
   });
@@ -65,6 +69,7 @@ export async function addWardrobeItem(input: {
     anchor: input.anchor,
     color: input.color,
     image_url: path,
+    user_id: userId,
   });
   if (error) throw error;
 }
