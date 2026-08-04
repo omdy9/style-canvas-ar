@@ -1,4 +1,9 @@
-/** Crops the scan square from the video and knocks out the flat background. */
+/**
+ * Crops the scan square from the video and keeps only the garment:
+ * the background is removed with a colour-tolerant flood fill from the
+ * frame edges (so garment-coloured pixels in the middle survive), then the
+ * result is trimmed to the garment's bounding box.
+ */
 export function captureGarment(video: HTMLVideoElement): {
   blob: Promise<Blob | null>;
   color: string;
@@ -8,77 +13,139 @@ export function captureGarment(video: HTMLVideoElement): {
   const sx = (video.videoWidth - size) / 2;
   const sy = (video.videoHeight - size) / 2;
 
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-  ctx.translate(canvas.width, 0);
+  const W = 512;
+  const H = 512;
+  const work = document.createElement("canvas");
+  work.width = W;
+  work.height = H;
+  const ctx = work.getContext("2d", { willReadFrequently: true })!;
+  ctx.translate(W, 0);
   ctx.scale(-1, 1);
-  ctx.drawImage(video, sx, sy, size, size, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(video, sx, sy, size, size, 0, 0, W, H);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const image = ctx.getImageData(0, 0, W, H);
   const d = image.data;
-  const w = canvas.width;
-  const h = canvas.height;
 
-  // Average the border pixels to estimate the background colour.
-  let br = 0,
-    bg = 0,
-    bb = 0,
-    n = 0;
-  const sample = (x: number, y: number) => {
-    const i = (y * w + x) * 4;
-    br += d[i]!;
-    bg += d[i + 1]!;
-    bb += d[i + 2]!;
-    n++;
+  const TOL = 42; // colour distance that still counts as background
+  const bgMask = new Uint8Array(W * H);
+  const stack: number[] = [];
+
+  const push = (p: number) => {
+    if (!bgMask[p]) {
+      bgMask[p] = 1;
+      stack.push(p);
+    }
   };
-  for (let x = 0; x < w; x += 4) {
-    sample(x, 0);
-    sample(x, h - 1);
-  }
-  for (let y = 0; y < h; y += 4) {
-    sample(0, y);
-    sample(w - 1, y);
-  }
-  br /= n;
-  bg /= n;
-  bb /= n;
 
-  const TOL = 60;
+  // Seed the flood fill from every edge pixel.
+  for (let x = 0; x < W; x++) {
+    push(x);
+    push((H - 1) * W + x);
+  }
+  for (let y = 0; y < H; y++) {
+    push(y * W);
+    push(y * W + W - 1);
+  }
+
+  const close = (a: number, b: number) => {
+    const i = a * 4;
+    const j = b * 4;
+    return Math.hypot(d[i]! - d[j]!, d[i + 1]! - d[j + 1]!, d[i + 2]! - d[j + 2]!) < TOL;
+  };
+
+  while (stack.length) {
+    const p = stack.pop()!;
+    const x = p % W;
+    const y = (p / W) | 0;
+    if (x > 0 && !bgMask[p - 1] && close(p, p - 1)) push(p - 1);
+    if (x < W - 1 && !bgMask[p + 1] && close(p, p + 1)) push(p + 1);
+    if (y > 0 && !bgMask[p - W] && close(p, p - W)) push(p - W);
+    if (y < H - 1 && !bgMask[p + W] && close(p, p + W)) push(p + W);
+  }
+
+  // Drop isolated foreground specks (noise) with a small neighbour count pass.
+  const solid = new Uint8Array(bgMask.length);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const p = y * W + x;
+      if (bgMask[p]) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) if (!bgMask[p + dy * W + dx]) n++;
+      if (n >= 5) solid[p] = 1;
+    }
+  }
+
+  let minX = W,
+    minY = H,
+    maxX = -1,
+    maxY = -1;
   let cr = 0,
     cg = 0,
     cb = 0,
     kept = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const r = d[i]!,
-      g = d[i + 1]!,
-      b = d[i + 2]!;
-    const delta = Math.hypot(r - br, g - bg, b - bb);
-    if (delta < TOL) {
-      d[i + 3] = 0;
-    } else {
-      if (delta < TOL * 1.6) d[i + 3] = Math.round(255 * ((delta - TOL) / (TOL * 0.6)));
-      cr += r;
-      cg += g;
-      cb += b;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const p = y * W + x;
+      const i = p * 4;
+      if (!solid[p]) {
+        d[i + 3] = 0;
+        continue;
+      }
+      // Feather pixels that touch the background for a clean edge.
+      const edge =
+        x === 0 ||
+        y === 0 ||
+        x === W - 1 ||
+        y === H - 1 ||
+        !solid[p - 1] ||
+        !solid[p + 1] ||
+        !solid[p - W] ||
+        !solid[p + W];
+      if (edge) d[i + 3] = 170;
+      cr += d[i]!;
+      cg += d[i + 1]!;
+      cb += d[i + 2]!;
       kept++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
     }
   }
   ctx.putImageData(image, 0, 0);
+
+  // Trim to the garment, keeping a small margin and a square output.
+  const out = document.createElement("canvas");
+  out.width = W;
+  out.height = H;
+  const octx = out.getContext("2d")!;
+  if (kept > 500 && maxX > minX && maxY > minY) {
+    const pad = 8;
+    const bx = Math.max(0, minX - pad);
+    const by = Math.max(0, minY - pad);
+    const bw = Math.min(W - bx, maxX - minX + pad * 2);
+    const bh = Math.min(H - by, maxY - minY + pad * 2);
+    const side = Math.max(bw, bh);
+    const scale = W / side;
+    const dw = bw * scale;
+    const dh = bh * scale;
+    octx.drawImage(work, bx, by, bw, bh, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  } else {
+    octx.drawImage(work, 0, 0);
+  }
 
   const hex = (v: number) =>
     Math.max(0, Math.min(255, Math.round(v)))
       .toString(16)
       .padStart(2, "0");
-  const color = kept
-    ? `#${hex(cr / kept)}${hex(cg / kept)}${hex(cb / kept)}`
-    : "#cccccc";
+  const color = kept ? `#${hex(cr / kept)}${hex(cg / kept)}${hex(cb / kept)}` : "#cccccc";
 
   return {
     color,
-    dataUrl: canvas.toDataURL("image/png"),
-    blob: new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png")),
+    dataUrl: out.toDataURL("image/png"),
+    blob: new Promise<Blob | null>((resolve) => out.toBlob(resolve, "image/png")),
   };
 }
