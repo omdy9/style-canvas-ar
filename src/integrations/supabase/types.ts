@@ -23,6 +23,7 @@ export type Database = {
           id: string
           image_url: string
           name: string
+          user_id: string
         }
         Insert: {
           anchor?: string
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           image_url: string
           name: string
+          user_id: string
         }
         Update: {
           anchor?: string
@@ -41,6 +43,7 @@ export type Database = {
           id?: string
           image_url?: string
           name?: string
+          user_id?: string
         }
         Relationships: []
       }
