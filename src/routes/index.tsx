@@ -2,6 +2,7 @@ import { createFileRoute, ClientOnly } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 
 const ARTryOn = lazy(() => import("@/components/ar/ARTryOn"));
+const StylistSearch = lazy(() => import("@/components/stylist/StylistSearch"));
 
 const title = "StyleAR — See Your Style Before You Wear It";
 const description =
@@ -61,6 +62,23 @@ function Index() {
               <ARTryOn />
             </Suspense>
           </ClientOnly>
+        </section>
+
+        <section className="mt-16">
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Style me for an <span className="gold-text">occasion</span>
+          </h2>
+          <p className="mt-3 max-w-xl text-sm text-muted-foreground">
+            Type where you're going and the stylist builds looks from the pieces already in your
+            wardrobe — matched on colour, style and fit — with Pinterest inspiration for each.
+          </p>
+          <div className="mt-6">
+            <ClientOnly fallback={<div className="glass h-24 animate-pulse rounded-full" />}>
+              <Suspense fallback={<div className="glass h-24 animate-pulse rounded-full" />}>
+                <StylistSearch />
+              </Suspense>
+            </ClientOnly>
+          </div>
         </section>
 
         <footer className="mt-16 border-t border-border pt-6 text-xs text-muted-foreground">
