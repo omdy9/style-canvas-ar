@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { ImageClassifier } from "@mediapipe/tasks-vision";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
 import { loadClothingClassifier, evaluateClothing, type ClothingCheck } from "./classify";
@@ -29,7 +30,7 @@ export default function ARTryOn() {
     detectForVideo: (v: HTMLVideoElement, t: number) => any;
     close: () => void;
   } | null>(null);
-  const classifierRef = useRef<Awaited<ReturnType<typeof loadClothingClassifier>> | null>(null);
+  const classifierRef = useRef<ImageClassifier | null>(null);
   const lastClassifyRef = useRef(0);
   const stableHitsRef = useRef(0);
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -103,6 +104,16 @@ export default function ARTryOn() {
   }, []);
 
   useEffect(() => stop, [stop]);
+
+  const scan = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const result = captureGarment(video);
+    const blob = await result.blob;
+    if (!blob) return;
+    setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+    setDraftName("");
+  }, []);
 
   const start = useCallback(async () => {
     setStatus("loading");
@@ -191,18 +202,7 @@ export default function ARTryOn() {
           : "Couldn't start the AR mirror on this device.",
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const scan = async () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const result = captureGarment(video);
-    const blob = await result.blob;
-    if (!blob) return;
-    setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-    setDraftName("");
-  };
+  }, [scan]);
 
   const savePending = async () => {
     if (!pending) return;
@@ -351,7 +351,7 @@ export default function ARTryOn() {
                   </button>
                 ) : (
                   <button
-                    onClick={scan}
+                    onClick={() => void scan()}
                     className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
                   >
                     Scan now
