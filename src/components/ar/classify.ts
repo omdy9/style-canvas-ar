@@ -3,6 +3,8 @@
  * Runs against the live video feed so "Scan clothes" mode only fires
  * when something clothing-like is actually in frame.
  */
+import type { FilesetResolver, ImageClassifier } from "@mediapipe/tasks-vision";
+
 const MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_classifier/efficientnet_lite0/float32/1/efficientnet_lite0.tflite";
 
@@ -71,10 +73,8 @@ export const CLOTHING_LABELS = new Set([
 
 export type ClothingCheck = { isClothing: boolean; label: string; score: number };
 
-type Fileset = Awaited<ReturnType<typeof import("@mediapipe/tasks-vision").FilesetResolver.forVisionTasks>>;
-
 /** Creates the classifier, reusing a fileset already loaded by the caller. */
-export async function loadClothingClassifier(fileset: Fileset) {
+export async function loadClothingClassifier(fileset: FilesetResolver): Promise<ImageClassifier> {
   const vision = await import("@mediapipe/tasks-vision");
   return vision.ImageClassifier.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
