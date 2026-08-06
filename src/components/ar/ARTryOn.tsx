@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
+import { loadClothingClassifier, evaluateClothing, type ClothingCheck } from "./classify";
 import {
   ANCHORS,
   ANCHOR_LABEL,
@@ -14,6 +15,7 @@ import {
 
 type Status = "idle" | "loading" | "live" | "error";
 type Mode = "wear" | "scan";
+type Pending = { dataUrl: string; blob: Blob; color: string } | null;
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL =
@@ -27,9 +29,13 @@ export default function ARTryOn() {
     detectForVideo: (v: HTMLVideoElement, t: number) => any;
     close: () => void;
   } | null>(null);
+  const classifierRef = useRef<Awaited<ReturnType<typeof loadClothingClassifier>> | null>(null);
+  const lastClassifyRef = useRef(0);
+  const stableHitsRef = useRef(0);
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
   const wornRef = useRef<WardrobeItem[]>([]);
   const modeRef = useRef<Mode>("wear");
+  const pendingRef = useRef<Pending>(null);
 
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [worn, setWorn] = useState<Set<string>>(new Set());
@@ -38,9 +44,8 @@ export default function ARTryOn() {
   const [message, setMessage] = useState("");
   const [tracking, setTracking] = useState(false);
   const [shot, setShot] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ dataUrl: string; blob: Blob; color: string } | null>(
-    null,
-  );
+  const [pending, setPending] = useState<Pending>(null);
+  const [garmentCheck, setGarmentCheck] = useState<ClothingCheck | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftAnchor, setDraftAnchor] = useState<Anchor>("torso");
   const [saving, setSaving] = useState(false);
@@ -53,6 +58,9 @@ export default function ARTryOn() {
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
 
   const refresh = useCallback(async () => {
     try {
@@ -86,6 +94,10 @@ export default function ARTryOn() {
     if (v) v.srcObject = null;
     landmarkerRef.current?.close();
     landmarkerRef.current = null;
+    classifierRef.current?.close();
+    classifierRef.current = null;
+    stableHitsRef.current = 0;
+    setGarmentCheck(null);
     setStatus("idle");
     setTracking(false);
   }, []);
@@ -103,6 +115,7 @@ export default function ARTryOn() {
         runningMode: "VIDEO",
         numPoses: 1,
       })) as never;
+      classifierRef.current = await loadClothingClassifier(fileset);
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -147,6 +160,24 @@ export default function ARTryOn() {
               }
             }
           }
+        } else if (
+          modeRef.current === "scan" &&
+          classifierRef.current &&
+          ts - lastClassifyRef.current > 250
+        ) {
+          lastClassifyRef.current = ts;
+          const result = classifierRef.current.classifyForVideo(video, ts);
+          const check = evaluateClothing(result);
+          setGarmentCheck(check);
+
+          if (check.isClothing) stableHitsRef.current += 1;
+          else stableHitsRef.current = 0;
+
+          // ~750ms of a stable clothing read, nothing pending review yet → auto-scan.
+          if (stableHitsRef.current >= 3 && !pendingRef.current) {
+            stableHitsRef.current = 0;
+            void scan();
+          }
         }
         rafRef.current = requestAnimationFrame(loop);
       };
@@ -160,6 +191,7 @@ export default function ARTryOn() {
           : "Couldn't start the AR mirror on this device.",
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const scan = async () => {
@@ -264,8 +296,17 @@ export default function ARTryOn() {
           />
 
           {status === "live" && mode === "scan" && !pending && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="aspect-square h-[70%] rounded-2xl border-2 border-dashed border-primary/70" />
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <div
+                className={`aspect-square h-[70%] rounded-2xl border-2 border-dashed transition-colors ${
+                  garmentCheck?.isClothing ? "border-emerald-400" : "border-primary/70"
+                }`}
+              />
+              <div className="glass rounded-full px-4 py-1.5 text-xs">
+                {garmentCheck?.isClothing
+                  ? `Clothing detected · ${Math.round(garmentCheck.score * 100)}%`
+                  : "Hold a garment steady in the frame"}
+              </div>
             </div>
           )}
 
@@ -313,7 +354,7 @@ export default function ARTryOn() {
                     onClick={scan}
                     className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
                   >
-                    Scan garment
+                    Scan now
                   </button>
                 )}
                 <button
@@ -387,8 +428,8 @@ export default function ARTryOn() {
               </h2>
               {items.length === 0 ? (
                 <p className="mt-4 text-sm text-muted-foreground">
-                  Nothing saved yet. Switch to “Scan clothes”, hold a garment inside the frame and
-                  capture it — it's stored in your wardrobe and appears in this carousel.
+                  Nothing saved yet. Switch to “Scan clothes”, hold a garment inside the frame — it's
+                  detected automatically and captured, or tap “Scan now” to grab it manually.
                 </p>
               ) : (
                 <div className="-mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
@@ -434,7 +475,7 @@ export default function ARTryOn() {
                 Last capture
               </h2>
               <img src={shot} alt="Captured AR outfit" className="mt-4 rounded-2xl" />
-              <a
+              
                 href={shot}
                 download="stylear-look.png"
                 className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
