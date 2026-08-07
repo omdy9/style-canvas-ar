@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ImageClassifier } from "@mediapipe/tasks-vision";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
-import { loadClothingClassifier, evaluateClothing, type ClothingCheck } from "./classify";
+import { detectGarment, type ClothingCheck } from "./presence";
 import {
   ANCHORS,
   ANCHOR_LABEL,
@@ -30,13 +29,13 @@ export default function ARTryOn() {
     detectForVideo: (v: HTMLVideoElement, t: number) => any;
     close: () => void;
   } | null>(null);
-  const classifierRef = useRef<ImageClassifier | null>(null);
   const lastClassifyRef = useRef(0);
   const stableHitsRef = useRef(0);
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
   const wornRef = useRef<WardrobeItem[]>([]);
   const modeRef = useRef<Mode>("wear");
   const pendingRef = useRef<Pending>(null);
+  const latestPoseRef = useRef<Array<{ x: number; y: number; visibility?: number }> | null>(null);
 
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [worn, setWorn] = useState<Set<string>>(new Set());
@@ -95,8 +94,6 @@ export default function ARTryOn() {
     if (v) v.srcObject = null;
     landmarkerRef.current?.close();
     landmarkerRef.current = null;
-    classifierRef.current?.close();
-    classifierRef.current = null;
     stableHitsRef.current = 0;
     setGarmentCheck(null);
     setStatus("idle");
@@ -108,7 +105,7 @@ export default function ARTryOn() {
   const scan = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
-    const result = captureGarment(video);
+    const result = captureGarment(video, latestPoseRef.current ?? undefined);
     const blob = await result.blob;
     if (!blob) return;
     setPending({ dataUrl: result.dataUrl, blob, color: result.color });
@@ -126,8 +123,6 @@ export default function ARTryOn() {
         runningMode: "VIDEO",
         numPoses: 1,
       })) as never;
-      classifierRef.current = await loadClothingClassifier(fileset);
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -157,6 +152,7 @@ export default function ARTryOn() {
         if (modeRef.current === "wear" && ts !== last) {
           last = ts;
           const pose = lmk.detectForVideo(video, ts)?.landmarks?.[0];
+          latestPoseRef.current = pose ?? null;
           setTracking(Boolean(pose));
           if (pose) {
             const px = pose.map((p: { x: number; y: number; visibility?: number }) => ({
@@ -171,14 +167,10 @@ export default function ARTryOn() {
               }
             }
           }
-        } else if (
-          modeRef.current === "scan" &&
-          classifierRef.current &&
-          ts - lastClassifyRef.current > 250
-        ) {
+        } else if (modeRef.current === "scan" && ts - lastClassifyRef.current > 200) {
           lastClassifyRef.current = ts;
-          const result = classifierRef.current.classifyForVideo(video, ts);
-          const check = evaluateClothing(result);
+          latestPoseRef.current = lmk.detectForVideo(video, ts)?.landmarks?.[0] ?? null;
+          const check = detectGarment(video);
           setGarmentCheck(check);
 
           if (check.isClothing) stableHitsRef.current += 1;
@@ -304,7 +296,7 @@ export default function ARTryOn() {
               />
               <div className="glass rounded-full px-4 py-1.5 text-xs">
                 {garmentCheck?.isClothing
-                  ? `Clothing detected · ${Math.round(garmentCheck.score * 100)}%`
+                  ? "Garment detected · holding steady…"
                   : "Hold a garment steady in the frame"}
               </div>
             </div>
