@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { rememberSession, restoreSession } from "@/lib/session-persist";
 
 /** Wardrobe data is private per person, so these surfaces require a session. */
 export default function AuthGate({ children }: { children: ReactNode }) {
@@ -13,9 +14,12 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    void supabase.auth.getSession().then(({ data: d }) => {
-      setSession(d.session);
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      rememberSession(s);
+    });
+    void restoreSession().then((s) => {
+      setSession(s);
       setReady(true);
     });
     return () => data.subscription.unsubscribe();
@@ -50,7 +54,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
         <div className="flex items-center justify-end gap-3 text-xs text-muted-foreground">
           <span className="truncate">{session.user.email ?? "Signed in"}</span>
           <button
-            onClick={() => supabase.auth.signOut()}
+            onClick={() => {
+              rememberSession(null);
+              void supabase.auth.signOut();
+            }}
             className="rounded-full border border-border px-4 py-1.5 transition hover:text-foreground"
           >
             Sign out
