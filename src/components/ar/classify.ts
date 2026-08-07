@@ -3,7 +3,9 @@
  * Runs against the live video feed so "Scan clothes" mode only fires
  * when something clothing-like is actually in frame.
  */
-import type { ImageClassifier, WasmFileset } from "@mediapipe/tasks-vision";
+import type { ImageClassifier } from "@mediapipe/tasks-vision";
+
+type WasmFileset = { wasmLoaderPath: string; wasmBinaryPath: string };
 
 const MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_classifier/efficientnet_lite0/float32/1/efficientnet_lite0.tflite";
