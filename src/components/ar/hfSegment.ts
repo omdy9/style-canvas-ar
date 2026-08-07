@@ -1,18 +1,18 @@
 /**
- * Clothing segmentation using the Hugging Face Inference API.
+ * Clothing segmentation using the official @huggingface/inference client.
  *
  * Model: mattmdjaga/segformer_b2_clothes
- * Detects 18 clothing categories: hat, hair, sunglasses, top, skirt, pants,
- * dress, belt, shoe, bag, scarf, jacket, etc.
+ * Detects 18 clothing categories: hat, hair, sunglasses, upper-clothes,
+ * skirt, pants, dress, belt, shoe, bag, scarf, etc.
  *
- * Returns a cropped, background-removed PNG blob + dominant colour.
+ * Uses the official HF JS client which correctly handles browser CORS.
  */
+import { HfInference } from "@huggingface/inference";
 
 const HF_TOKEN = import.meta.env.VITE_HUGGING_FACE_TOKEN as string | undefined;
 const MODEL_ID = "mattmdjaga/segformer_b2_clothes";
-const HF_API_URL = `https://api-inference.huggingface.co/models/${MODEL_ID}`;
 
-// Labels we consider "clothing" (exclude background, skin, hair, face, etc.)
+// Labels we treat as "clothing" (exclude background, skin, hair, face)
 const GARMENT_LABELS = new Set([
   "hat",
   "sunglasses",
@@ -35,57 +35,25 @@ export type HFSegmentResult = {
   labels: string[];
 };
 
-/** Convert a canvas/image blob to base64 data URI */
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+/** Whether the HF token is configured */
+export function isHFConfigured(): boolean {
+  return Boolean(HF_TOKEN);
 }
 
 /**
- * Call the Hugging Face Inference API with the given image blob.
- * Returns an array of segment objects: { label, score, mask }.
+ * Apply segmentation masks onto the source image,
+ * making non-garment pixels transparent, and crop to tight bounding box.
  */
-async function callHFSegmentation(
-  imageBlob: Blob,
-): Promise<{ label: string; score: number; mask: string }[]> {
-  if (!HF_TOKEN) throw new Error("VITE_HUGGING_FACE_TOKEN is not set.");
-
-  const response = await fetch(HF_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${HF_TOKEN}`,
-      "Content-Type": imageBlob.type || "image/png",
-    },
-    body: imageBlob,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`HF API error ${response.status}: ${text}`);
-  }
-
-  return response.json() as Promise<{ label: string; score: number; mask: string }[]>;
-}
-
-/**
- * Given the source image element and the HF segmentation output,
- * composite all garment-category masks onto a transparent canvas and
- * crop to the tightest bounding box.
- */
-function applyMasksToImage(
+async function applyMasksToImage(
   src: HTMLImageElement,
-  segments: { label: string; score: number; mask: string }[],
+  segments: { label: string; score: number; mask: Blob }[],
   W: number,
   H: number,
-): { canvas: HTMLCanvasElement; labels: string[]; color: string } {
+): Promise<{ canvas: HTMLCanvasElement; labels: string[]; color: string }> {
   const garmentSegs = segments.filter((s) => GARMENT_LABELS.has(s.label));
   const detectedLabels = garmentSegs.map((s) => s.label);
 
-  // Start with the full source image on a canvas
+  // Draw source image onto working canvas
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -94,45 +62,42 @@ function applyMasksToImage(
   const imageData = ctx.getImageData(0, 0, W, H);
   const pixels = imageData.data;
 
-  // Build a combined garment mask across all garment segments
+  // Build combined garment mask
   const combinedMask = new Uint8Array(W * H);
 
   for (const seg of garmentSegs) {
-    // The mask is a grayscale PNG encoded as base64 data URI
-    const maskImg = new Image();
-    maskImg.src = `data:image/png;base64,${seg.mask}`;
+    // The mask is returned as a Blob — draw it to read pixel data
+    const maskUrl = URL.createObjectURL(seg.mask);
+    const maskImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = maskUrl;
+    });
 
-    // Draw the mask to a temporary canvas to read pixel data
     const maskCanvas = document.createElement("canvas");
     maskCanvas.width = W;
     maskCanvas.height = H;
     const mctx = maskCanvas.getContext("2d", { willReadFrequently: true })!;
     mctx.drawImage(maskImg, 0, 0, W, H);
-    const maskData = mctx.getImageData(0, 0, W, H).data;
+    URL.revokeObjectURL(maskUrl);
 
+    const maskData = mctx.getImageData(0, 0, W, H).data;
     for (let i = 0; i < W * H; i++) {
-      // Mask is grayscale; white (255) = garment present
-      if (maskData[i * 4]! > 128) {
-        combinedMask[i] = 1;
-      }
+      // Mask is grayscale — white (>128) = garment
+      if (maskData[i * 4]! > 128) combinedMask[i] = 1;
     }
   }
 
-  // Apply mask: zero out alpha for non-garment pixels
-  let minX = W,
-    minY = H,
-    maxX = 0,
-    maxY = 0;
-  let cr = 0,
-    cg = 0,
-    cb = 0,
-    kept = 0;
+  // Zero alpha for non-garment pixels; collect bounding box + dominant colour
+  let minX = W, minY = H, maxX = 0, maxY = 0;
+  let cr = 0, cg = 0, cb = 0, kept = 0;
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = y * W + x;
       if (!combinedMask[i]) {
-        pixels[i * 4 + 3] = 0; // transparent
+        pixels[i * 4 + 3] = 0;
       } else {
         cr += pixels[i * 4]!;
         cg += pixels[i * 4 + 1]!;
@@ -145,7 +110,6 @@ function applyMasksToImage(
       }
     }
   }
-
   ctx.putImageData(imageData, 0, 0);
 
   const hex = (v: number) =>
@@ -154,7 +118,7 @@ function applyMasksToImage(
     ? `#${hex(cr / kept)}${hex(cg / kept)}${hex(cb / kept)}`
     : "#cccccc";
 
-  // Crop to the bounding box with 8px padding, square output
+  // Crop to bounding box with padding, square 512×512 output
   const out = document.createElement("canvas");
   out.width = 512;
   out.height = 512;
@@ -168,7 +132,14 @@ function applyMasksToImage(
     const bh = Math.min(H - by, maxY - minY + pad * 2);
     const side = Math.max(bw, bh);
     const scale = 512 / side;
-    octx.drawImage(canvas, bx, by, bw, bh, (512 - bw * scale) / 2, (512 - bh * scale) / 2, bw * scale, bh * scale);
+    octx.drawImage(
+      canvas,
+      bx, by, bw, bh,
+      (512 - bw * scale) / 2,
+      (512 - bh * scale) / 2,
+      bw * scale,
+      bh * scale,
+    );
   } else {
     octx.drawImage(canvas, 0, 0, W, H, 0, 0, 512, 512);
   }
@@ -177,11 +148,16 @@ function applyMasksToImage(
 }
 
 /**
- * Main entry point.
- * Accepts a File (from <input type="file">) and returns the segmented garment.
+ * Main entry point — accepts a File from <input type="file">.
+ * Sends it to the HF Inference API using the official JS client
+ * (which handles browser CORS correctly).
  */
 export async function segmentClothingFromFile(file: File): Promise<HFSegmentResult> {
-  // 1. Load the image to get natural dimensions
+  if (!HF_TOKEN) throw new Error("Hugging Face token is not configured.");
+
+  const hf = new HfInference(HF_TOKEN);
+
+  // Load image to get natural dimensions
   const objectUrl = URL.createObjectURL(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image();
@@ -189,35 +165,47 @@ export async function segmentClothingFromFile(file: File): Promise<HFSegmentResu
     el.onerror = reject;
     el.src = objectUrl;
   });
-
   const W = img.naturalWidth;
   const H = img.naturalHeight;
-
-  // 2. Convert image to a PNG blob for the API call
-  const tempCanvas = document.createElement("canvas");
-  tempCanvas.width = W;
-  tempCanvas.height = H;
-  tempCanvas.getContext("2d")!.drawImage(img, 0, 0);
-  const pngBlob = await new Promise<Blob | null>((r) =>
-    tempCanvas.toBlob(r, "image/png"),
-  );
   URL.revokeObjectURL(objectUrl);
 
-  if (!pngBlob) throw new Error("Failed to convert image to PNG.");
+  // Call HF image-segmentation via the official client
+  const segments = await hf.imageSegmentation({
+    model: MODEL_ID,
+    data: file,
+  });
 
-  // 3. Call the HF API
-  const segments = await callHFSegmentation(pngBlob);
+  // Convert score-sorted segments into our format (masks returned as Blobs by the client)
+  const segmentsWithBlobs = segments.map((s) => ({
+    label: s.label,
+    score: s.score,
+    // The HF client returns the mask as a base64-encoded PNG string inside `mask`
+    mask: s.mask,
+  }));
 
-  // 4. Apply the garment masks
-  const { canvas, labels, color } = applyMasksToImage(img, segments, W, H);
+  // Build mask blobs from base64 strings
+  const processed = await Promise.all(
+    segmentsWithBlobs
+      .filter((s) => GARMENT_LABELS.has(s.label))
+      .map(async (s) => {
+        // Convert base64 mask to a Blob
+        const res = await fetch(`data:image/png;base64,${s.mask}`);
+        return { label: s.label, score: s.score, mask: await res.blob() };
+      })
+  );
 
-  const dataUrl = canvas.toDataURL("image/png");
-  const blob = new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png"));
+  if (processed.length === 0) {
+    throw new Error(
+      "No clothing detected in this image. Try a photo with a clear garment against a different background."
+    );
+  }
 
-  return { dataUrl, blob, labels, color };
-}
+  const { canvas, labels, color } = await applyMasksToImage(img, processed, W, H);
 
-/** Whether the HF token is configured */
-export function isHFConfigured(): boolean {
-  return Boolean(HF_TOKEN);
+  return {
+    dataUrl: canvas.toDataURL("image/png"),
+    blob: new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png")),
+    labels,
+    color,
+  };
 }
