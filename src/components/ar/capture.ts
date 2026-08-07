@@ -4,7 +4,9 @@
  * frame edges (so garment-coloured pixels in the middle survive), then the
  * result is trimmed to the garment's bounding box.
  */
-export function captureGarment(video: HTMLVideoElement): {
+type PosePoint = { x: number; y: number; visibility?: number };
+
+export function captureGarment(video: HTMLVideoElement, pose?: PosePoint[]): {
   blob: Promise<Blob | null>;
   color: string;
   dataUrl: string;
@@ -26,6 +28,90 @@ export function captureGarment(video: HTMLVideoElement): {
 
   const image = ctx.getImageData(0, 0, W, H);
   const d = image.data;
+
+  // When the garment is being worn, it commonly touches every side of the
+  // scan frame. Edge flood-fill then mistakes the garment for the background.
+  // Use the tracked shoulders/elbows/hips to isolate the worn torso instead.
+  const poseIndices = [13, 11, 23, 24, 12, 14];
+  const hasTorsoPose = poseIndices.every((index) => {
+    const point = pose?.[index];
+    return point && (point.visibility ?? 1) > 0.45;
+  });
+
+  if (hasTorsoPose && pose) {
+    const points = poseIndices.map((index) => {
+      const point = pose[index]!;
+      return {
+        x: W - ((point.x * video.videoWidth - sx) / size) * W,
+        y: ((point.y * video.videoHeight - sy) / size) * H,
+      };
+    });
+    const shoulderWidth = Math.abs(points[1]!.x - points[4]!.x);
+    // Extend slightly beyond elbows and below hips so sleeves and hems remain.
+    points[0]!.x += points[0]!.x < W / 2 ? -shoulderWidth * 0.12 : shoulderWidth * 0.12;
+    points[5]!.x += points[5]!.x < W / 2 ? -shoulderWidth * 0.12 : shoulderWidth * 0.12;
+    points[2]!.y += shoulderWidth * 0.18;
+    points[3]!.y += shoulderWidth * 0.18;
+
+    const mask = document.createElement("canvas");
+    mask.width = W;
+    mask.height = H;
+    const mctx = mask.getContext("2d")!;
+    mctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) mctx.moveTo(point.x, point.y);
+      else mctx.lineTo(point.x, point.y);
+    });
+    mctx.closePath();
+    mctx.filter = "blur(5px)";
+    mctx.fillStyle = "#fff";
+    mctx.fill();
+    mctx.filter = "none";
+    mctx.globalCompositeOperation = "source-in";
+    mctx.drawImage(work, 0, 0);
+
+    const bounds = points.reduce(
+      (value, point) => ({
+        minX: Math.min(value.minX, point.x),
+        minY: Math.min(value.minY, point.y),
+        maxX: Math.max(value.maxX, point.x),
+        maxY: Math.max(value.maxY, point.y),
+      }),
+      { minX: W, minY: H, maxX: 0, maxY: 0 },
+    );
+    const bx = Math.max(0, bounds.minX - 10);
+    const by = Math.max(0, bounds.minY - 10);
+    const bw = Math.min(W - bx, bounds.maxX - bounds.minX + 20);
+    const bh = Math.min(H - by, bounds.maxY - bounds.minY + 20);
+    const out = document.createElement("canvas");
+    out.width = W;
+    out.height = H;
+    const octx = out.getContext("2d")!;
+    const scale = Math.min(W / Math.max(bw, 1), H / Math.max(bh, 1));
+    const dw = bw * scale;
+    const dh = bh * scale;
+    octx.drawImage(mask, bx, by, bw, bh, (W - dw) / 2, (H - dh) / 2, dw, dh);
+
+    let cr = 0;
+    let cg = 0;
+    let cb = 0;
+    let count = 0;
+    const torsoData = mctx.getImageData(0, 0, W, H).data;
+    for (let i = 0; i < torsoData.length; i += 16) {
+      if (torsoData[i + 3]! < 80) continue;
+      cr += torsoData[i]!;
+      cg += torsoData[i + 1]!;
+      cb += torsoData[i + 2]!;
+      count++;
+    }
+    const hex = (value: number) => Math.round(value).toString(16).padStart(2, "0");
+    const color = count ? `#${hex(cr / count)}${hex(cg / count)}${hex(cb / count)}` : "#cccccc";
+    return {
+      color,
+      dataUrl: out.toDataURL("image/png"),
+      blob: new Promise<Blob | null>((resolve) => out.toBlob(resolve, "image/png")),
+    };
+  }
 
   const TOL = 42; // colour distance that still counts as background
   const bgMask = new Uint8Array(W * H);

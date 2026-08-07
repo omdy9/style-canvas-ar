@@ -35,6 +35,7 @@ export default function ARTryOn() {
   const wornRef = useRef<WardrobeItem[]>([]);
   const modeRef = useRef<Mode>("wear");
   const pendingRef = useRef<Pending>(null);
+  const latestPoseRef = useRef<Array<{ x: number; y: number; visibility?: number }> | null>(null);
 
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [worn, setWorn] = useState<Set<string>>(new Set());
@@ -104,7 +105,7 @@ export default function ARTryOn() {
   const scan = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
-    const result = captureGarment(video);
+    const result = captureGarment(video, latestPoseRef.current ?? undefined);
     const blob = await result.blob;
     if (!blob) return;
     setPending({ dataUrl: result.dataUrl, blob, color: result.color });
@@ -151,6 +152,7 @@ export default function ARTryOn() {
         if (modeRef.current === "wear" && ts !== last) {
           last = ts;
           const pose = lmk.detectForVideo(video, ts)?.landmarks?.[0];
+          latestPoseRef.current = pose ?? null;
           setTracking(Boolean(pose));
           if (pose) {
             const px = pose.map((p: { x: number; y: number; visibility?: number }) => ({
