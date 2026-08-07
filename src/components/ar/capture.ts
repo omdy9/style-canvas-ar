@@ -135,7 +135,47 @@ export function captureGarment(
     };
   }
 
-  const TOL = 42; // colour distance that still counts as background
+  // Build a background color profile from border regions where the garment is highly unlikely to touch
+  const edgeColors: [number, number, number][] = [];
+  const step = 4;
+
+  // Sample entire top edge
+  for (let x = 0; x < W; x += step) {
+    const idx = x * 4;
+    edgeColors.push([d[idx]!, d[idx + 1]!, d[idx + 2]!]);
+  }
+
+  // Sample top half of left and right edges
+  for (let y = 0; y < H / 2; y += step) {
+    const idxLeft = (y * W) * 4;
+    const idxRight = (y * W + W - 1) * 4;
+    edgeColors.push([d[idxLeft]!, d[idxLeft + 1]!, d[idxLeft + 2]!]);
+    edgeColors.push([d[idxRight]!, d[idxRight + 1]!, d[idxRight + 2]!]);
+  }
+
+  // Sample bottom corners (24x24 pixels) where garment is unlikely to touch
+  const cornerSize = 24;
+  for (let y = H - cornerSize; y < H; y += step) {
+    for (let x = 0; x < cornerSize; x += step) {
+      const idx = (y * W + x) * 4;
+      edgeColors.push([d[idx]!, d[idx + 1]!, d[idx + 2]!]);
+    }
+    for (let x = W - cornerSize; x < W; x += step) {
+      const idx = (y * W + x) * 4;
+      edgeColors.push([d[idx]!, d[idx + 1]!, d[idx + 2]!]);
+    }
+  }
+
+  const isBgColor = (r: number, g: number, b: number) => {
+    let minDist = Infinity;
+    for (const [er, eg, eb] of edgeColors) {
+      const dist = Math.hypot(r - er, g - eg, b - eb);
+      if (dist < minDist) minDist = dist;
+    }
+    return minDist < 80; // Distance tolerance to background color profile
+  };
+
+  const TOL = 42; // Colour distance that still counts as background
   const bgMask = new Uint8Array(W * H);
   const stack: number[] = [];
 
@@ -146,20 +186,32 @@ export function captureGarment(
     }
   };
 
-  // Seed the flood fill from every edge pixel.
+  // Seed the flood fill from edge pixels, but only if they match the background color profile
   for (let x = 0; x < W; x++) {
-    push(x);
-    push((H - 1) * W + x);
+    const p1 = x;
+    const idx1 = p1 * 4;
+    if (isBgColor(d[idx1]!, d[idx1 + 1]!, d[idx1 + 2]!)) push(p1);
+
+    const p2 = (H - 1) * W + x;
+    const idx2 = p2 * 4;
+    if (isBgColor(d[idx2]!, d[idx2 + 1]!, d[idx2 + 2]!)) push(p2);
   }
   for (let y = 0; y < H; y++) {
-    push(y * W);
-    push(y * W + W - 1);
+    const p1 = y * W;
+    const idx1 = p1 * 4;
+    if (isBgColor(d[idx1]!, d[idx1 + 1]!, d[idx1 + 2]!)) push(p1);
+
+    const p2 = y * W + W - 1;
+    const idx2 = p2 * 4;
+    if (isBgColor(d[idx2]!, d[idx2 + 1]!, d[idx2 + 2]!)) push(p2);
   }
 
   const close = (a: number, b: number) => {
     const i = a * 4;
     const j = b * 4;
-    return Math.hypot(d[i]! - d[j]!, d[i + 1]! - d[j + 1]!, d[i + 2]! - d[j + 2]!) < TOL;
+    const localDiff = Math.hypot(d[i]! - d[j]!, d[i + 1]! - d[j + 1]!, d[i + 2]! - d[j + 2]!);
+    if (localDiff >= TOL) return false;
+    return isBgColor(d[j]!, d[j + 1]!, d[j + 2]!);
   };
 
   while (stack.length) {
