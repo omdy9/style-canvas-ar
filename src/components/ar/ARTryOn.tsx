@@ -475,7 +475,7 @@ export default function ARTryOn() {
                 Last capture
               </h2>
               <img src={shot} alt="Captured AR outfit" className="mt-4 rounded-2xl" />
-              
+              <a
                 href={shot}
                 download="stylear-look.png"
                 className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
