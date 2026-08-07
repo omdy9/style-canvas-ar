@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
 import { detectGarment, type ClothingCheck } from "./presence";
-import { Upload } from "lucide-react";
+import { Upload, Sparkles } from "lucide-react";
+import { segmentClothingFromFile, isHFConfigured } from "./hfSegment";
 import {
   ANCHORS,
   ANCHOR_LABEL,
@@ -119,37 +120,50 @@ export default function ARTryOn() {
     if (!file) return;
 
     setProcessingUpload(true);
-    const toastId = toast.loading("Processing image and detecting garment...");
+    const usingAI = isHFConfigured();
+    const toastId = toast.loading(
+      usingAI
+        ? "AI is detecting and segmenting the garment…"
+        : "Processing image and extracting garment…"
+    );
 
     try {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.src = url;
+      if (usingAI) {
+        // ── AI path: Hugging Face SegFormer ─────────────────────────────
+        const result = await segmentClothingFromFile(file);
+        const blob = await result.blob;
+        if (!blob) throw new Error("AI could not extract the garment.");
 
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Failed to load image."));
-      });
+        const label = result.labels.length
+          ? result.labels.map((l) => l.replace(/-/g, " ")).join(", ")
+          : "garment";
 
-      const result = captureGarment(img, undefined, false);
-      const blob = await result.blob;
-      
-      URL.revokeObjectURL(url);
-
-      if (!blob) {
-        throw new Error("Could not extract garment from the image.");
+        setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+        setDraftName(file.name.replace(/\.[^/.]+$/, ""));
+        toast.success(`Detected: ${label}`, { id: toastId });
+      } else {
+        // ── Fallback path: colour flood-fill ────────────────────────────
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.src = url;
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("Failed to load image."));
+        });
+        const result = captureGarment(img, undefined, false);
+        const blob = await result.blob;
+        URL.revokeObjectURL(url);
+        if (!blob) throw new Error("Could not extract garment from the image.");
+        setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+        setDraftName(file.name.replace(/\.[^/.]+$/, ""));
+        toast.success("Garment captured!", { id: toastId });
       }
-
-      setPending({
-        dataUrl: result.dataUrl,
-        blob,
-        color: result.color,
-      });
-      setDraftName(file.name.replace(/\.[^/.]+$/, ""));
-      toast.success("Garment detected successfully!", { id: toastId });
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to process image.", { id: toastId });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to process image.",
+        { id: toastId }
+      );
     } finally {
       setProcessingUpload(false);
       e.target.value = "";
@@ -368,9 +382,19 @@ export default function ARTryOn() {
                       : "Start AR mirror"}
                 </button>
                 {mode === "scan" && (
-                  <label className="rounded-full border border-border bg-background px-7 py-3 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-2">
-                    <Upload className="h-4.5 w-4.5" />
-                    <span>Upload garment image</span>
+                  <label
+                    className={`rounded-full border px-7 py-3 text-sm font-medium transition cursor-pointer flex items-center gap-2 ${
+                      isHFConfigured()
+                        ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
+                        : "border-border bg-background hover:bg-secondary"
+                    } ${processingUpload ? "opacity-60 pointer-events-none" : ""}`}
+                  >
+                    {isHFConfigured() ? (
+                      <Sparkles className="h-4 w-4" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    <span>{isHFConfigured() ? "AI detect garment" : "Upload garment image"}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -410,9 +434,17 @@ export default function ARTryOn() {
                     >
                       Scan now
                     </button>
-                    <label className="glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-1.5">
-                      <Upload className="h-4 w-4" />
-                      <span>Upload image</span>
+                    <label
+                      className={`glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-1.5 ${
+                        processingUpload ? "opacity-60 pointer-events-none" : ""
+                      }`}
+                    >
+                      {isHFConfigured() ? (
+                        <Sparkles className="h-4 w-4" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      <span>{isHFConfigured() ? "AI detect" : "Upload image"}</span>
                       <input
                         type="file"
                         accept="image/*"
