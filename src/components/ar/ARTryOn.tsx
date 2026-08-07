@@ -126,7 +126,13 @@ export default function ARTryOn() {
         runningMode: "VIDEO",
         numPoses: 1,
       })) as never;
-      classifierRef.current = await loadClothingClassifier(fileset);
+      try {
+        classifierRef.current = await loadClothingClassifier(fileset);
+      } catch (err) {
+        // Auto-detection is a bonus; manual "Scan now" still works without it.
+        console.error("Clothing classifier unavailable", err);
+        classifierRef.current = null;
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -475,7 +481,7 @@ export default function ARTryOn() {
                 Last capture
               </h2>
               <img src={shot} alt="Captured AR outfit" className="mt-4 rounded-2xl" />
-              
+              <a
                 href={shot}
                 download="stylear-look.png"
                 className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
