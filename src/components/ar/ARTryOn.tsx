@@ -169,6 +169,7 @@ export default function ARTryOn() {
           }
         } else if (modeRef.current === "scan" && ts - lastClassifyRef.current > 200) {
           lastClassifyRef.current = ts;
+          latestPoseRef.current = lmk.detectForVideo(video, ts)?.landmarks?.[0] ?? null;
           const check = detectGarment(video);
           setGarmentCheck(check);
 
