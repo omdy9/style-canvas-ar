@@ -6,14 +6,32 @@
  */
 type PosePoint = { x: number; y: number; visibility?: number };
 
-export function captureGarment(video: HTMLVideoElement, pose?: PosePoint[]): {
+export function captureGarment(
+  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
+  pose?: PosePoint[],
+  mirror = true
+): {
   blob: Promise<Blob | null>;
   color: string;
   dataUrl: string;
 } {
-  const size = Math.min(video.videoWidth, video.videoHeight) * 0.7;
-  const sx = (video.videoWidth - size) / 2;
-  const sy = (video.videoHeight - size) / 2;
+  let width = 0;
+  let height = 0;
+  if (source instanceof HTMLVideoElement) {
+    width = source.videoWidth;
+    height = source.videoHeight;
+  } else if (source instanceof HTMLImageElement) {
+    width = source.naturalWidth;
+    height = source.naturalHeight;
+  } else {
+    width = source.width;
+    height = source.height;
+  }
+
+  const cropRatio = source instanceof HTMLVideoElement ? 0.7 : 0.95;
+  const size = Math.min(width, height) * cropRatio;
+  const sx = (width - size) / 2;
+  const sy = (height - size) / 2;
 
   const W = 512;
   const H = 512;
@@ -21,10 +39,14 @@ export function captureGarment(video: HTMLVideoElement, pose?: PosePoint[]): {
   work.width = W;
   work.height = H;
   const ctx = work.getContext("2d", { willReadFrequently: true })!;
-  ctx.translate(W, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, sx, sy, size, size, 0, 0, W, H);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (mirror) {
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(source, sx, sy, size, size, 0, 0, W, H);
+  if (mirror) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
 
   const image = ctx.getImageData(0, 0, W, H);
   const d = image.data;
@@ -42,8 +64,8 @@ export function captureGarment(video: HTMLVideoElement, pose?: PosePoint[]): {
     const points = poseIndices.map((index) => {
       const point = pose[index]!;
       return {
-        x: W - ((point.x * video.videoWidth - sx) / size) * W,
-        y: ((point.y * video.videoHeight - sy) / size) * H,
+        x: W - ((point.x * width - sx) / size) * W,
+        y: ((point.y * height - sy) / size) * H,
       };
     });
     const shoulderWidth = Math.abs(points[1]!.x - points[4]!.x);

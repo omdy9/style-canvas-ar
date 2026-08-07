@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
 import { detectGarment, type ClothingCheck } from "./presence";
+import { Upload } from "lucide-react";
 import {
   ANCHORS,
   ANCHOR_LABEL,
@@ -49,6 +50,7 @@ export default function ARTryOn() {
   const [draftName, setDraftName] = useState("");
   const [draftAnchor, setDraftAnchor] = useState<Anchor>("torso");
   const [saving, setSaving] = useState(false);
+  const [processingUpload, setProcessingUpload] = useState(false);
 
   const wornItems = useMemo(() => items.filter((i) => worn.has(i.id)), [items, worn]);
 
@@ -111,6 +113,48 @@ export default function ARTryOn() {
     setPending({ dataUrl: result.dataUrl, blob, color: result.color });
     setDraftName("");
   }, []);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setProcessingUpload(true);
+    const toastId = toast.loading("Processing image and detecting garment...");
+
+    try {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image."));
+      });
+
+      const result = captureGarment(img, undefined, false);
+      const blob = await result.blob;
+      
+      URL.revokeObjectURL(url);
+
+      if (!blob) {
+        throw new Error("Could not extract garment from the image.");
+      }
+
+      setPending({
+        dataUrl: result.dataUrl,
+        blob,
+        color: result.color,
+      });
+      setDraftName(file.name.replace(/\.[^/.]+$/, ""));
+      toast.success("Garment detected successfully!", { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to process image.", { id: toastId });
+    } finally {
+      setProcessingUpload(false);
+      e.target.value = "";
+    }
+  };
 
   const start = useCallback(async () => {
     setStatus("loading");
@@ -307,19 +351,36 @@ export default function ARTryOn() {
               <p className="max-w-xs text-sm text-muted-foreground">
                 {status === "loading" || status === "error"
                   ? message
-                  : "Start the mirror, then scan a garment by holding it in the frame — or step back and try on what's saved."}
+                  : mode === "scan"
+                    ? "Start the mirror to scan automatically, or upload an image of the garment."
+                    : "Start the mirror, then step back and try on what's saved."}
               </p>
-              <button
-                onClick={start}
-                disabled={status === "loading"}
-                className="rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
-              >
-                {status === "loading"
-                  ? "Preparing…"
-                  : status === "error"
-                    ? "Try again"
-                    : "Start AR mirror"}
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  onClick={start}
+                  disabled={status === "loading"}
+                  className="rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {status === "loading"
+                    ? "Preparing…"
+                    : status === "error"
+                      ? "Try again"
+                      : "Start AR mirror"}
+                </button>
+                {mode === "scan" && (
+                  <label className="rounded-full border border-border bg-background px-7 py-3 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-2">
+                    <Upload className="h-4.5 w-4.5" />
+                    <span>Upload garment image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => void handleImageUpload(e)}
+                      className="hidden"
+                      disabled={processingUpload}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           )}
 
@@ -342,12 +403,25 @@ export default function ARTryOn() {
                     Capture look
                   </button>
                 ) : (
-                  <button
-                    onClick={() => void scan()}
-                    className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-                  >
-                    Scan now
-                  </button>
+                  <>
+                    <button
+                      onClick={() => void scan()}
+                      className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                    >
+                      Scan now
+                    </button>
+                    <label className="glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-1.5">
+                      <Upload className="h-4 w-4" />
+                      <span>Upload image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => void handleImageUpload(e)}
+                        className="hidden"
+                        disabled={processingUpload}
+                      />
+                    </label>
+                  </>
                 )}
                 <button
                   onClick={stop}
