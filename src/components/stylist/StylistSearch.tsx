@@ -29,9 +29,9 @@ export default function StylistSearch() {
         await run({
           data: {
             occasion: query,
-            wardrobe: wardrobe.map(({ id, name, anchor, color }) => ({
+            wardrobe: wardrobe.map(({ id, name, anchor, color, style, formality }) => ({
               id,
-              name,
+              name: [name, style, formality].filter(Boolean).join(" · ").slice(0, 80),
               anchor,
               color,
             })),

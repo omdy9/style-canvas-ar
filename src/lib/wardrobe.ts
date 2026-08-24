@@ -110,6 +110,7 @@ export async function addWardrobeItem(input: {
 }
 
 export async function deleteWardrobeItem(item: WardrobeItem) {
+  if (item.readonly) throw new Error("Catalog pieces can't be removed.");
   await supabase.storage.from("wardrobe").remove([item.image_url]);
   const { error } = await supabase.from("wardrobe_items").delete().eq("id", item.id);
   if (error) throw error;
