@@ -9,7 +9,7 @@
  */
 import { HfInference } from "@huggingface/inference";
 
-const HF_TOKEN = import.meta.env.VITE_HUGGING_FACE_TOKEN as string | undefined;
+const HF_TOKEN = import.meta.env['VITE_HUGGING_FACE_TOKEN'] as string | undefined;
 const MODEL_ID = "mattmdjaga/segformer_b2_clothes";
 
 // Labels we treat as "clothing" (exclude background, skin, hair, face)
@@ -172,7 +172,7 @@ export async function segmentClothingFromFile(file: File): Promise<HFSegmentResu
   // Call HF image-segmentation via the official client
   const segments = await hf.imageSegmentation({
     model: MODEL_ID,
-    data: file,
+    inputs: file,
   });
 
   // Convert score-sorted segments into our format (masks returned as Blobs by the client)
@@ -200,7 +200,12 @@ export async function segmentClothingFromFile(file: File): Promise<HFSegmentResu
     );
   }
 
-  const { canvas, labels, color } = await applyMasksToImage(img, processed, W, H);
+  const { canvas, labels, color } = await applyMasksToImage(
+    img,
+    processed.map((p) => ({ ...p, score: p.score ?? 0 })),
+    W,
+    H,
+  );
 
   return {
     dataUrl: canvas.toDataURL("image/png"),

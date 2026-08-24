@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      catalog_items: {
+        Row: {
+          anchor: string
+          category: string
+          color: string
+          created_at: string
+          formality: string
+          id: string
+          image_url: string
+          name: string
+          position: number
+          season: string
+          style: string
+          updated_at: string
+        }
+        Insert: {
+          anchor?: string
+          category?: string
+          color?: string
+          created_at?: string
+          formality?: string
+          id?: string
+          image_url: string
+          name: string
+          position?: number
+          season?: string
+          style?: string
+          updated_at?: string
+        }
+        Update: {
+          anchor?: string
+          category?: string
+          color?: string
+          created_at?: string
+          formality?: string
+          id?: string
+          image_url?: string
+          name?: string
+          position?: number
+          season?: string
+          style?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       wardrobe_items: {
         Row: {
           anchor: string
