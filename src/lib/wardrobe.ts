@@ -21,17 +21,51 @@ export type WardrobeItem = {
   image_url: string;
   created_at: string;
   signedUrl: string;
+  readonly?: boolean;
+  style?: string;
+  formality?: string;
+  season?: string;
 };
 
-export async function listWardrobe(): Promise<WardrobeItem[]> {
+async function listCatalog(): Promise<WardrobeItem[]> {
   const { data, error } = await supabase
-    .from("wardrobe_items")
+    .from("catalog_items")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("position", { ascending: true });
+  if (error || !data?.length) return [];
+
+  const { data: signed } = await supabase.storage
+    .from("catalog")
+    .createSignedUrls(
+      data.map((r) => r.image_url),
+      3600,
+    );
+
+  return data.map((r, i) => ({
+    id: r.id,
+    name: r.name,
+    category: r.category,
+    anchor: r.anchor as Anchor,
+    color: r.color,
+    image_url: r.image_url,
+    created_at: r.created_at,
+    signedUrl: signed?.[i]?.signedUrl ?? "",
+    readonly: true,
+    style: r.style,
+    formality: r.formality,
+    season: r.season,
+  }));
+}
+
+export async function listWardrobe(): Promise<WardrobeItem[]> {
+  const [{ data, error }, catalog] = await Promise.all([
+    supabase.from("wardrobe_items").select("*").order("created_at", { ascending: false }),
+    listCatalog(),
+  ]);
   if (error) throw error;
 
   const rows = data ?? [];
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return catalog;
 
   const { data: signed } = await supabase.storage
     .from("wardrobe")
@@ -40,11 +74,12 @@ export async function listWardrobe(): Promise<WardrobeItem[]> {
       3600,
     );
 
-  return rows.map((r, i) => ({
+  const mine = rows.map((r, i) => ({
     ...(r as Omit<WardrobeItem, "signedUrl" | "anchor">),
     anchor: r.anchor as Anchor,
     signedUrl: signed?.[i]?.signedUrl ?? "",
   }));
+  return [...mine, ...catalog];
 }
 
 export async function addWardrobeItem(input: {
