@@ -354,12 +354,12 @@ export default function ARTryOn() {
 
   return (
     <div className="grid gap-6">
-      <div className="glass inline-flex w-fit rounded-full p-1">
+      <div className="glass sticky top-2 z-20 grid w-full grid-cols-2 rounded-full p-1 sm:static sm:inline-flex sm:w-fit sm:grid-cols-none">
         {(["wear", "scan"] as Mode[]).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`rounded-full px-5 py-2 text-sm transition ${
+            className={`min-h-11 rounded-full px-5 py-2 text-sm transition ${
               mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground"
             }`}
           >
@@ -367,6 +367,7 @@ export default function ARTryOn() {
           </button>
         ))}
       </div>
+
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="glass relative aspect-[3/4] overflow-hidden rounded-3xl sm:aspect-video">
