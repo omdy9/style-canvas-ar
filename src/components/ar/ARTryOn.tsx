@@ -563,17 +563,18 @@ export default function ARTryOn() {
                   </option>
                 ))}
               </select>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <button
                   onClick={savePending}
                   disabled={saving}
-                  className="flex-1 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   {saving ? "Saving…" : "Save to wardrobe"}
                 </button>
                 <button
                   onClick={() => setPending(null)}
-                  className="rounded-full border border-border px-5 py-2.5 text-sm transition hover:bg-secondary"
+                  className="min-h-12 rounded-full border border-border px-5 py-2.5 text-sm transition hover:bg-secondary"
                 >
                   Retake
                 </button>
@@ -590,17 +591,17 @@ export default function ARTryOn() {
                   detected automatically and captured, or tap “Scan now” to grab it manually.
                 </p>
               ) : (
-                <div className="-mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
+                <div className="touch-carousel -mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
                   {items.map((item) => {
                     const on = worn.has(item.id);
                     return (
                       <div
                         key={item.id}
-                        className={`w-36 shrink-0 snap-start rounded-2xl border p-2 transition ${
+                        className={`w-32 shrink-0 snap-start sm:w-36 rounded-2xl border p-2 transition ${
                           on ? "border-primary/70 bg-primary/10" : "border-border bg-secondary/40"
                         }`}
                       >
-                        <button onClick={() => toggleWorn(item.id)} className="w-full text-left">
+                        <button onClick={() => toggleWorn(item.id)} className="w-full touch-manipulation text-left">
                           <img
                             src={item.signedUrl}
                             alt={item.name}
@@ -615,7 +616,7 @@ export default function ARTryOn() {
                         </button>
                         <button
                           onClick={() => remove(item)}
-                          className="mt-2 w-full rounded-lg py-1 text-[11px] text-muted-foreground transition hover:text-destructive"
+                          className="mt-2 min-h-9 w-full rounded-lg py-1 text-[11px] text-muted-foreground transition hover:text-destructive"
                         >
                           Remove
                         </button>
