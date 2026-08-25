@@ -27,9 +27,9 @@ function Index() {
   return (
     <main className="min-h-screen bg-background">
       <div className="pointer-events-none fixed inset-0 opacity-60 [background:radial-gradient(60%_50%_at_50%_0%,oklch(0.75_0.12_85/0.16),transparent_70%)]" />
-      <div className="relative mx-auto max-w-6xl px-5 py-10 sm:py-16">
+      <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-5 sm:py-16">
         <header className="lux-fade flex items-center justify-between">
-          <span className="text-lg font-semibold tracking-[0.3em]">
+          <span className="text-base font-semibold tracking-[0.25em] sm:text-lg sm:tracking-[0.3em]">
             STYLE<span className="gold-text">AR</span>
           </span>
           <span className="hidden text-xs uppercase tracking-[0.25em] text-muted-foreground sm:block">
@@ -37,27 +37,27 @@ function Index() {
           </span>
         </header>
 
-        <section className="lux-fade mt-12 max-w-2xl">
-          <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
+        <section className="lux-fade mt-8 max-w-2xl sm:mt-12">
+          <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-6xl">
             See your style
             <br />
             <span className="gold-text">before you wear it.</span>
           </h1>
-          <p className="mt-5 text-base leading-relaxed text-muted-foreground">
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-base">
             Hold a garment up to your camera and it's scanned into your wardrobe. Every saved piece
             joins the carousel below, ready to be worn on your body in real time with AR tracking.
           </p>
         </section>
 
-        <section className="mt-10">
+        <section className="mt-8 sm:mt-10">
           <ClientOnly
             fallback={
-              <div className="glass h-[520px] animate-pulse rounded-3xl" aria-hidden="true" />
+              <div className="glass h-[420px] animate-pulse sm:h-[520px] rounded-3xl" aria-hidden="true" />
             }
           >
             <Suspense
               fallback={
-                <div className="glass h-[520px] animate-pulse rounded-3xl" aria-hidden="true" />
+                <div className="glass h-[420px] animate-pulse sm:h-[520px] rounded-3xl" aria-hidden="true" />
               }
             >
               <AuthGate>
@@ -67,7 +67,7 @@ function Index() {
           </ClientOnly>
         </section>
 
-        <section className="mt-16">
+        <section className="mt-12 sm:mt-16">
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             Style me for an <span className="gold-text">occasion</span>
           </h2>
@@ -86,7 +86,7 @@ function Index() {
           </div>
         </section>
 
-        <footer className="mt-16 border-t border-border pt-6 text-xs text-muted-foreground">
+        <footer className="mt-12 sm:mt-16 border-t border-border pt-6 text-xs text-muted-foreground">
           StyleAR — on-device pose tracking. No video ever leaves your browser.
         </footer>
       </div>

@@ -3,8 +3,10 @@ import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
 import { detectGarment, type ClothingCheck } from "./presence";
-import { Upload, Sparkles } from "lucide-react";
+import { Upload, Sparkles, Loader2 } from "lucide-react";
 import { segmentClothingFromFile, isHFConfigured } from "./hfSegment";
+import { useIsMobile } from "@/hooks/use-mobile";
+
 import {
   ANCHORS,
   ANCHOR_LABEL,
@@ -52,6 +54,10 @@ export default function ARTryOn() {
   const [draftAnchor, setDraftAnchor] = useState<Anchor>("torso");
   const [saving, setSaving] = useState(false);
   const [processingUpload, setProcessingUpload] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const isMobile = useIsMobile();
+
 
   const wornItems = useMemo(() => items.filter((i) => worn.has(i.id)), [items, worn]);
 
@@ -108,12 +114,18 @@ export default function ARTryOn() {
   const scan = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
-    const result = captureGarment(video, latestPoseRef.current ?? undefined);
-    const blob = await result.blob;
-    if (!blob) return;
-    setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-    setDraftName("");
+    setScanning(true);
+    try {
+      const result = captureGarment(video, latestPoseRef.current ?? undefined);
+      const blob = await result.blob;
+      if (!blob) return;
+      setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+      setDraftName("");
+    } finally {
+      setScanning(false);
+    }
   }, []);
+
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -182,7 +194,12 @@ export default function ARTryOn() {
         numPoses: 1,
       })) as never;
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: isMobile ? 720 : 1280 },
+          height: { ideal: isMobile ? 480 : 720 },
+          frameRate: { ideal: isMobile ? 24 : 30 },
+        },
         audio: false,
       });
       const video = videoRef.current!;
@@ -191,7 +208,10 @@ export default function ARTryOn() {
       setStatus("live");
       setMessage("");
 
+      // Throttle pose inference on phones — every frame melts mid-range GPUs.
+      const minFrameGap = isMobile ? 1000 / 20 : 0;
       let last = -1;
+      let trackedNow = false;
       const loop = () => {
         const canvas = canvasRef.current;
         const lmk = landmarkerRef.current;
@@ -207,11 +227,15 @@ export default function ARTryOn() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         const ts = performance.now();
-        if (modeRef.current === "wear" && ts !== last) {
+        if (modeRef.current === "wear" && ts - last >= minFrameGap && ts !== last) {
           last = ts;
           const pose = lmk.detectForVideo(video, ts)?.landmarks?.[0];
           latestPoseRef.current = pose ?? null;
-          setTracking(Boolean(pose));
+          if (Boolean(pose) !== trackedNow) {
+            trackedNow = Boolean(pose);
+            setTracking(trackedNow);
+          }
+
           if (pose) {
             const px = pose.map((p: { x: number; y: number; visibility?: number }) => ({
               x: p.x * canvas.width,
@@ -225,7 +249,10 @@ export default function ARTryOn() {
               }
             }
           }
-        } else if (modeRef.current === "scan" && ts - lastClassifyRef.current > 200) {
+        } else if (
+          modeRef.current === "scan" &&
+          ts - lastClassifyRef.current > (isMobile ? 350 : 200)
+        ) {
           lastClassifyRef.current = ts;
           latestPoseRef.current = lmk.detectForVideo(video, ts)?.landmarks?.[0] ?? null;
           const check = detectGarment(video);
@@ -252,7 +279,7 @@ export default function ARTryOn() {
           : "Couldn't start the AR mirror on this device.",
       );
     }
-  }, [scan]);
+  }, [scan, isMobile]);
 
   const savePending = async () => {
     if (!pending) return;
@@ -303,27 +330,36 @@ export default function ARTryOn() {
   const capture = () => {
     const video = videoRef.current;
     const overlay = canvasRef.current;
-    if (!video || !overlay) return;
-    const out = document.createElement("canvas");
-    out.width = overlay.width;
-    out.height = overlay.height;
-    const ctx = out.getContext("2d")!;
-    ctx.translate(out.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, out.width, out.height);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(overlay, 0, 0);
-    setShot(out.toDataURL("image/png"));
+    if (!video || !overlay || capturing) return;
+    setCapturing(true);
+    // Let the spinner paint before the (blocking) canvas export.
+    requestAnimationFrame(() => {
+      try {
+        const out = document.createElement("canvas");
+        out.width = overlay.width;
+        out.height = overlay.height;
+        const ctx = out.getContext("2d")!;
+        ctx.translate(out.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, out.width, out.height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(overlay, 0, 0);
+        setShot(out.toDataURL(isMobile ? "image/jpeg" : "image/png", 0.9));
+      } finally {
+        setCapturing(false);
+      }
+    });
   };
+
 
   return (
     <div className="grid gap-6">
-      <div className="glass inline-flex w-fit rounded-full p-1">
+      <div className="glass sticky top-2 z-20 grid w-full grid-cols-2 rounded-full p-1 sm:static sm:inline-flex sm:w-fit sm:grid-cols-none">
         {(["wear", "scan"] as Mode[]).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`rounded-full px-5 py-2 text-sm transition ${
+            className={`min-h-11 rounded-full px-5 py-2 text-sm transition ${
               mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground"
             }`}
           >
@@ -331,6 +367,7 @@ export default function ARTryOn() {
           </button>
         ))}
       </div>
+
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="glass relative aspect-[3/4] overflow-hidden rounded-3xl sm:aspect-video">
@@ -369,12 +406,13 @@ export default function ARTryOn() {
                     ? "Start the mirror to scan automatically, or upload an image of the garment."
                     : "Start the mirror, then step back and try on what's saved."}
               </p>
-              <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex w-full max-w-sm flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
                 <button
                   onClick={start}
                   disabled={status === "loading"}
-                  className="rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
+                  {status === "loading" && <Loader2 className="h-4 w-4 animate-spin" />}
                   {status === "loading"
                     ? "Preparing…"
                     : status === "error"
@@ -383,18 +421,26 @@ export default function ARTryOn() {
                 </button>
                 {mode === "scan" && (
                   <label
-                    className={`rounded-full border px-7 py-3 text-sm font-medium transition cursor-pointer flex items-center gap-2 ${
+                    className={`min-h-12 rounded-full border px-7 py-3 text-sm font-medium transition cursor-pointer flex items-center justify-center gap-2 ${
                       isHFConfigured()
                         ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
                         : "border-border bg-background hover:bg-secondary"
                     } ${processingUpload ? "opacity-60 pointer-events-none" : ""}`}
                   >
-                    {isHFConfigured() ? (
+                    {processingUpload ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isHFConfigured() ? (
                       <Sparkles className="h-4 w-4" />
                     ) : (
                       <Upload className="h-4 w-4" />
                     )}
-                    <span>{isHFConfigured() ? "AI detect garment" : "Upload garment image"}</span>
+                    <span>
+                      {processingUpload
+                        ? "Processing…"
+                        : isHFConfigured()
+                          ? "AI detect garment"
+                          : "Upload garment image"}
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
@@ -405,6 +451,7 @@ export default function ARTryOn() {
                   </label>
                 )}
               </div>
+
             </div>
           )}
 
@@ -418,33 +465,45 @@ export default function ARTryOn() {
                   {tracking ? "Body tracked" : "Searching for you…"}
                 </div>
               )}
-              <div className="absolute inset-x-0 bottom-4 flex flex-wrap justify-center gap-3 px-4">
+              <div className="absolute inset-x-0 bottom-3 flex flex-wrap items-center justify-center gap-2 px-3 sm:bottom-4 sm:gap-3 sm:px-4">
                 {mode === "wear" ? (
                   <button
                     onClick={capture}
-                    className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                    disabled={capturing}
+                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
                   >
-                    Capture look
+                    {capturing && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {capturing ? "Capturing…" : "Capture look"}
                   </button>
                 ) : (
                   <>
                     <button
                       onClick={() => void scan()}
-                      className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                      disabled={scanning}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
                     >
-                      Scan now
+                      {scanning && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {scanning ? "Scanning…" : "Scan now"}
                     </button>
                     <label
-                      className={`glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-1.5 ${
+                      className={`glass min-h-12 flex-1 rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center justify-center gap-1.5 sm:flex-none ${
                         processingUpload ? "opacity-60 pointer-events-none" : ""
                       }`}
                     >
-                      {isHFConfigured() ? (
+                      {processingUpload ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isHFConfigured() ? (
                         <Sparkles className="h-4 w-4" />
                       ) : (
                         <Upload className="h-4 w-4" />
                       )}
-                      <span>{isHFConfigured() ? "AI detect" : "Upload image"}</span>
+                      <span>
+                        {processingUpload
+                          ? "Processing…"
+                          : isHFConfigured()
+                            ? "AI detect"
+                            : "Upload image"}
+                      </span>
                       <input
                         type="file"
                         accept="image/*"
@@ -457,11 +516,12 @@ export default function ARTryOn() {
                 )}
                 <button
                   onClick={stop}
-                  className="glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary"
+                  className="glass min-h-12 w-full rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary sm:w-auto"
                 >
                   Stop
                 </button>
               </div>
+
             </>
           )}
         </div>
@@ -503,17 +563,18 @@ export default function ARTryOn() {
                   </option>
                 ))}
               </select>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <button
                   onClick={savePending}
                   disabled={saving}
-                  className="flex-1 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   {saving ? "Saving…" : "Save to wardrobe"}
                 </button>
                 <button
                   onClick={() => setPending(null)}
-                  className="rounded-full border border-border px-5 py-2.5 text-sm transition hover:bg-secondary"
+                  className="min-h-12 rounded-full border border-border px-5 py-2.5 text-sm transition hover:bg-secondary"
                 >
                   Retake
                 </button>
@@ -530,17 +591,17 @@ export default function ARTryOn() {
                   detected automatically and captured, or tap “Scan now” to grab it manually.
                 </p>
               ) : (
-                <div className="-mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
+                <div className="touch-carousel -mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
                   {items.map((item) => {
                     const on = worn.has(item.id);
                     return (
                       <div
                         key={item.id}
-                        className={`w-36 shrink-0 snap-start rounded-2xl border p-2 transition ${
+                        className={`w-32 shrink-0 snap-start sm:w-36 rounded-2xl border p-2 transition ${
                           on ? "border-primary/70 bg-primary/10" : "border-border bg-secondary/40"
                         }`}
                       >
-                        <button onClick={() => toggleWorn(item.id)} className="w-full text-left">
+                        <button onClick={() => toggleWorn(item.id)} className="w-full touch-manipulation text-left">
                           <img
                             src={item.signedUrl}
                             alt={item.name}
@@ -555,7 +616,7 @@ export default function ARTryOn() {
                         </button>
                         <button
                           onClick={() => remove(item)}
-                          className="mt-2 w-full rounded-lg py-1 text-[11px] text-muted-foreground transition hover:text-destructive"
+                          className="mt-2 min-h-9 w-full rounded-lg py-1 text-[11px] text-muted-foreground transition hover:text-destructive"
                         >
                           Remove
                         </button>

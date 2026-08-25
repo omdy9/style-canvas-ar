@@ -58,7 +58,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
               rememberSession(null);
               void supabase.auth.signOut();
             }}
-            className="rounded-full border border-border px-4 py-1.5 transition hover:text-foreground"
+            className="min-h-10 shrink-0 rounded-full border border-border px-4 py-1.5 transition hover:text-foreground"
           >
             Sign out
           </button>
@@ -68,7 +68,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     );
 
   return (
-    <div className="glass mx-auto w-full max-w-md rounded-3xl p-6">
+    <div className="glass mx-auto w-full max-w-md rounded-3xl p-5 sm:p-6">
       <h2 className="text-lg font-medium">
         {mode === "signin" ? "Sign in to your wardrobe" : "Create your wardrobe"}
       </h2>
@@ -83,7 +83,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           aria-label="Email"
-          className="rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary"
+          className="min-h-12 rounded-xl border border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-primary sm:text-sm"
         />
         <input
           type="password"
@@ -93,19 +93,19 @@ export default function AuthGate({ children }: { children: ReactNode }) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
           aria-label="Password"
-          className="rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary"
+          className="min-h-12 rounded-xl border border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-primary sm:text-sm"
         />
         <button
           type="submit"
           disabled={busy}
-          className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+          className="min-h-12 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
         >
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
         </button>
       </form>
       <button
         onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-        className="mt-4 w-full text-xs text-muted-foreground underline-offset-4 hover:underline"
+        className="mt-4 min-h-10 w-full text-xs text-muted-foreground underline-offset-4 hover:underline"
       >
         {mode === "signin" ? "No account yet? Sign up" : "Already have an account? Sign in"}
       </button>
