@@ -249,7 +249,10 @@ export default function ARTryOn() {
               }
             }
           }
-        } else if (modeRef.current === "scan" && ts - lastClassifyRef.current > 200) {
+        } else if (
+          modeRef.current === "scan" &&
+          ts - lastClassifyRef.current > (isMobile ? 350 : 200)
+        ) {
           lastClassifyRef.current = ts;
           latestPoseRef.current = lmk.detectForVideo(video, ts)?.landmarks?.[0] ?? null;
           const check = detectGarment(video);
@@ -276,7 +279,7 @@ export default function ARTryOn() {
           : "Couldn't start the AR mirror on this device.",
       );
     }
-  }, [scan]);
+  }, [scan, isMobile]);
 
   const savePending = async () => {
     if (!pending) return;
