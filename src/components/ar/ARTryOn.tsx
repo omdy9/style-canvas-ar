@@ -406,12 +406,13 @@ export default function ARTryOn() {
                     ? "Start the mirror to scan automatically, or upload an image of the garment."
                     : "Start the mirror, then step back and try on what's saved."}
               </p>
-              <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex w-full max-w-sm flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
                 <button
                   onClick={start}
                   disabled={status === "loading"}
-                  className="rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
+                  {status === "loading" && <Loader2 className="h-4 w-4 animate-spin" />}
                   {status === "loading"
                     ? "Preparing…"
                     : status === "error"
@@ -420,18 +421,26 @@ export default function ARTryOn() {
                 </button>
                 {mode === "scan" && (
                   <label
-                    className={`rounded-full border px-7 py-3 text-sm font-medium transition cursor-pointer flex items-center gap-2 ${
+                    className={`min-h-12 rounded-full border px-7 py-3 text-sm font-medium transition cursor-pointer flex items-center justify-center gap-2 ${
                       isHFConfigured()
                         ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
                         : "border-border bg-background hover:bg-secondary"
                     } ${processingUpload ? "opacity-60 pointer-events-none" : ""}`}
                   >
-                    {isHFConfigured() ? (
+                    {processingUpload ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isHFConfigured() ? (
                       <Sparkles className="h-4 w-4" />
                     ) : (
                       <Upload className="h-4 w-4" />
                     )}
-                    <span>{isHFConfigured() ? "AI detect garment" : "Upload garment image"}</span>
+                    <span>
+                      {processingUpload
+                        ? "Processing…"
+                        : isHFConfigured()
+                          ? "AI detect garment"
+                          : "Upload garment image"}
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
@@ -442,6 +451,7 @@ export default function ARTryOn() {
                   </label>
                 )}
               </div>
+
             </div>
           )}
 
