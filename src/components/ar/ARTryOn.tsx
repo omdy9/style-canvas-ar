@@ -114,12 +114,18 @@ export default function ARTryOn() {
   const scan = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
-    const result = captureGarment(video, latestPoseRef.current ?? undefined);
-    const blob = await result.blob;
-    if (!blob) return;
-    setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-    setDraftName("");
+    setScanning(true);
+    try {
+      const result = captureGarment(video, latestPoseRef.current ?? undefined);
+      const blob = await result.blob;
+      if (!blob) return;
+      setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+      setDraftName("");
+    } finally {
+      setScanning(false);
+    }
   }, []);
+
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
