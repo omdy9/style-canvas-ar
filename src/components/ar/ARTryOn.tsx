@@ -465,33 +465,45 @@ export default function ARTryOn() {
                   {tracking ? "Body tracked" : "Searching for you…"}
                 </div>
               )}
-              <div className="absolute inset-x-0 bottom-4 flex flex-wrap justify-center gap-3 px-4">
+              <div className="absolute inset-x-0 bottom-3 flex flex-wrap items-center justify-center gap-2 px-3 sm:bottom-4 sm:gap-3 sm:px-4">
                 {mode === "wear" ? (
                   <button
                     onClick={capture}
-                    className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                    disabled={capturing}
+                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
                   >
-                    Capture look
+                    {capturing && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {capturing ? "Capturing…" : "Capture look"}
                   </button>
                 ) : (
                   <>
                     <button
                       onClick={() => void scan()}
-                      className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                      disabled={scanning}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
                     >
-                      Scan now
+                      {scanning && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {scanning ? "Scanning…" : "Scan now"}
                     </button>
                     <label
-                      className={`glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center gap-1.5 ${
+                      className={`glass min-h-12 flex-1 rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center justify-center gap-1.5 sm:flex-none ${
                         processingUpload ? "opacity-60 pointer-events-none" : ""
                       }`}
                     >
-                      {isHFConfigured() ? (
+                      {processingUpload ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isHFConfigured() ? (
                         <Sparkles className="h-4 w-4" />
                       ) : (
                         <Upload className="h-4 w-4" />
                       )}
-                      <span>{isHFConfigured() ? "AI detect" : "Upload image"}</span>
+                      <span>
+                        {processingUpload
+                          ? "Processing…"
+                          : isHFConfigured()
+                            ? "AI detect"
+                            : "Upload image"}
+                      </span>
                       <input
                         type="file"
                         accept="image/*"
@@ -504,11 +516,12 @@ export default function ARTryOn() {
                 )}
                 <button
                   onClick={stop}
-                  className="glass rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary"
+                  className="glass min-h-12 w-full rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary sm:w-auto"
                 >
                   Stop
                 </button>
               </div>
+
             </>
           )}
         </div>
