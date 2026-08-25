@@ -3,8 +3,10 @@ import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
 import { detectGarment, type ClothingCheck } from "./presence";
-import { Upload, Sparkles } from "lucide-react";
+import { Upload, Sparkles, Loader2 } from "lucide-react";
 import { segmentClothingFromFile, isHFConfigured } from "./hfSegment";
+import { useIsMobile } from "@/hooks/use-mobile";
+
 import {
   ANCHORS,
   ANCHOR_LABEL,
