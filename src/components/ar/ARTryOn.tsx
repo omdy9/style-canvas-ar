@@ -194,7 +194,12 @@ export default function ARTryOn() {
         numPoses: 1,
       })) as never;
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: isMobile ? 720 : 1280 },
+          height: { ideal: isMobile ? 480 : 720 },
+          frameRate: { ideal: isMobile ? 24 : 30 },
+        },
         audio: false,
       });
       const video = videoRef.current!;
@@ -203,7 +208,10 @@ export default function ARTryOn() {
       setStatus("live");
       setMessage("");
 
+      // Throttle pose inference on phones — every frame melts mid-range GPUs.
+      const minFrameGap = isMobile ? 1000 / 20 : 0;
       let last = -1;
+      let trackedNow = false;
       const loop = () => {
         const canvas = canvasRef.current;
         const lmk = landmarkerRef.current;
@@ -219,11 +227,15 @@ export default function ARTryOn() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         const ts = performance.now();
-        if (modeRef.current === "wear" && ts !== last) {
+        if (modeRef.current === "wear" && ts - last >= minFrameGap && ts !== last) {
           last = ts;
           const pose = lmk.detectForVideo(video, ts)?.landmarks?.[0];
           latestPoseRef.current = pose ?? null;
-          setTracking(Boolean(pose));
+          if (Boolean(pose) !== trackedNow) {
+            trackedNow = Boolean(pose);
+            setTracking(trackedNow);
+          }
+
           if (pose) {
             const px = pose.map((p: { x: number; y: number; visibility?: number }) => ({
               x: p.x * canvas.width,
