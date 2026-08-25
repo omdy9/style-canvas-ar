@@ -54,6 +54,10 @@ export default function ARTryOn() {
   const [draftAnchor, setDraftAnchor] = useState<Anchor>("torso");
   const [saving, setSaving] = useState(false);
   const [processingUpload, setProcessingUpload] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const isMobile = useIsMobile();
+
 
   const wornItems = useMemo(() => items.filter((i) => worn.has(i.id)), [items, worn]);
 
