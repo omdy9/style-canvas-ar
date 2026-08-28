@@ -353,7 +353,7 @@ export default function ARTryOn() {
 
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <div className="glass sticky top-2 z-20 grid w-full grid-cols-2 rounded-full p-1 sm:static sm:inline-flex sm:w-fit sm:grid-cols-none">
         {(["wear", "scan"] as Mode[]).map((m) => (
           <button
@@ -369,8 +369,9 @@ export default function ARTryOn() {
       </div>
 
 
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <div className="glass relative aspect-[3/4] overflow-hidden rounded-3xl sm:aspect-video">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="glass relative aspect-[3/4] min-w-0 overflow-hidden rounded-3xl sm:aspect-video">
+
           <video
             ref={videoRef}
             playsInline
@@ -470,7 +471,7 @@ export default function ARTryOn() {
                   <button
                     onClick={capture}
                     disabled={capturing}
-                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
+                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none sm:px-6"
                   >
                     {capturing && <Loader2 className="h-4 w-4 animate-spin" />}
                     {capturing ? "Capturing…" : "Capture look"}
@@ -480,13 +481,13 @@ export default function ARTryOn() {
                     <button
                       onClick={() => void scan()}
                       disabled={scanning}
-                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none sm:px-6"
                     >
                       {scanning && <Loader2 className="h-4 w-4 animate-spin" />}
                       {scanning ? "Scanning…" : "Scan now"}
                     </button>
                     <label
-                      className={`glass min-h-12 flex-1 rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center justify-center gap-1.5 sm:flex-none ${
+                      className={`glass min-h-12 flex-1 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center justify-center gap-1.5 sm:flex-none sm:px-6 ${
                         processingUpload ? "opacity-60 pointer-events-none" : ""
                       }`}
                     >
@@ -526,7 +527,7 @@ export default function ARTryOn() {
           )}
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {pending ? (
             <div className="glass lux-fade rounded-3xl p-5">
               <h2 className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
@@ -581,7 +582,7 @@ export default function ARTryOn() {
               </div>
             </div>
           ) : (
-            <div className="glass rounded-3xl p-5">
+            <div className="glass min-w-0 rounded-3xl p-5">
               <h2 className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
                 Wardrobe · {items.length}
               </h2>
@@ -591,7 +592,8 @@ export default function ARTryOn() {
                   detected automatically and captured, or tap “Scan now” to grab it manually.
                 </p>
               ) : (
-                <div className="touch-carousel -mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
+                <div className="touch-carousel -mx-1 mt-4 flex w-[calc(100%+0.5rem)] max-w-[calc(100%+0.5rem)] snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
+
                   {items.map((item) => {
                     const on = worn.has(item.id);
                     return (
