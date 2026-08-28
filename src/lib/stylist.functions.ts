@@ -10,7 +10,7 @@ const PieceSchema = z.object({
 
 const InputSchema = z.object({
   occasion: z.string().min(2).max(120),
-  wardrobe: z.array(PieceSchema).max(40),
+  wardrobe: z.array(PieceSchema).max(80),
 });
 
 export type StylistOutfit = {
