@@ -353,7 +353,7 @@ export default function ARTryOn() {
 
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <div className="glass sticky top-2 z-20 grid w-full grid-cols-2 rounded-full p-1 sm:static sm:inline-flex sm:w-fit sm:grid-cols-none">
         {(["wear", "scan"] as Mode[]).map((m) => (
           <button
@@ -369,7 +369,7 @@ export default function ARTryOn() {
       </div>
 
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div className="glass relative aspect-[3/4] min-w-0 overflow-hidden rounded-3xl sm:aspect-video">
 
           <video
