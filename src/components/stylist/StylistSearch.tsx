@@ -25,12 +25,17 @@ export default function StylistSearch() {
         toast.error("Scan a few pieces into your wardrobe first.");
         return;
       }
+      // Keep the AI payload within limits: always include your scanned pieces
+      // first, then fill the rest from the catalog (max 80 items).
+      const mine = wardrobe.filter((w) => !w.readonly);
+      const catalog = wardrobe.filter((w) => w.readonly);
+      const sent = [...mine, ...catalog].slice(0, 80);
       setPieces(Object.fromEntries(wardrobe.map((w) => [w.id, w])));
       setResult(
         await run({
           data: {
             occasion: query,
-            wardrobe: wardrobe.map(({ id, name, anchor, color, style, formality }) => ({
+            wardrobe: sent.map(({ id, name, anchor, color, style, formality }) => ({
               id,
               name: [name, style, formality].filter(Boolean).join(" · ").slice(0, 80),
               anchor,
