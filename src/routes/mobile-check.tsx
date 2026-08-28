@@ -3,7 +3,7 @@ import { lazy, Suspense } from "react";
 
 const ARTryOn = lazy(() => import("@/components/ar/ARTryOn"));
 
-export const Route = createFileRoute("/__mobile-check")({
+export const Route = createFileRoute("/mobile-check")({
   head: () => ({
     meta: [
       { title: "Mobile layout check — StyleAR" },
