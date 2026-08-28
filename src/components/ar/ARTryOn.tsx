@@ -369,8 +369,9 @@ export default function ARTryOn() {
       </div>
 
 
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <div className="glass relative aspect-[3/4] overflow-hidden rounded-3xl sm:aspect-video">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="glass relative aspect-[3/4] min-w-0 overflow-hidden rounded-3xl sm:aspect-video">
+
           <video
             ref={videoRef}
             playsInline
