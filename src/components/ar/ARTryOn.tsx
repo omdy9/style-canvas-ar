@@ -582,7 +582,7 @@ export default function ARTryOn() {
               </div>
             </div>
           ) : (
-            <div className="glass rounded-3xl p-5">
+            <div className="glass min-w-0 rounded-3xl p-5">
               <h2 className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
                 Wardrobe · {items.length}
               </h2>
@@ -592,7 +592,8 @@ export default function ARTryOn() {
                   detected automatically and captured, or tap “Scan now” to grab it manually.
                 </p>
               ) : (
-                <div className="touch-carousel -mx-1 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
+                <div className="touch-carousel -mx-1 mt-4 flex w-[calc(100%+0.5rem)] max-w-[calc(100%+0.5rem)] snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
+
                   {items.map((item) => {
                     const on = worn.has(item.id);
                     return (
