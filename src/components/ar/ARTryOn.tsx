@@ -527,7 +527,7 @@ export default function ARTryOn() {
           )}
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {pending ? (
             <div className="glass lux-fade rounded-3xl p-5">
               <h2 className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
