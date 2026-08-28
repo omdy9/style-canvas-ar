@@ -471,7 +471,7 @@ export default function ARTryOn() {
                   <button
                     onClick={capture}
                     disabled={capturing}
-                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
+                    className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none sm:px-6"
                   >
                     {capturing && <Loader2 className="h-4 w-4 animate-spin" />}
                     {capturing ? "Capturing…" : "Capture look"}
@@ -481,13 +481,13 @@ export default function ARTryOn() {
                     <button
                       onClick={() => void scan()}
                       disabled={scanning}
-                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none"
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60 sm:flex-none sm:px-6"
                     >
                       {scanning && <Loader2 className="h-4 w-4 animate-spin" />}
                       {scanning ? "Scanning…" : "Scan now"}
                     </button>
                     <label
-                      className={`glass min-h-12 flex-1 rounded-full px-6 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center justify-center gap-1.5 sm:flex-none ${
+                      className={`glass min-h-12 flex-1 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition hover:bg-secondary cursor-pointer flex items-center justify-center gap-1.5 sm:flex-none sm:px-6 ${
                         processingUpload ? "opacity-60 pointer-events-none" : ""
                       }`}
                     >
