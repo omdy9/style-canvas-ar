@@ -189,29 +189,75 @@ export default function ARTryOn() {
     }
   };
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (which: "user" | "environment" = facingRef.current) => {
     setStatus("loading");
     setMessage("Warming up the mirror…");
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          window.isSecureContext === false
+            ? "Camera needs a secure (https) connection on mobile."
+            : "This browser doesn't support camera access.",
+        );
+      }
+
+      // Stop any stream still held from a previous session / camera flip.
+      const prev = videoRef.current?.srcObject as MediaStream | null;
+      prev?.getTracks().forEach((t) => t.stop());
+      landmarkerRef.current?.close();
+      landmarkerRef.current = null;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
       const vision = await import("@mediapipe/tasks-vision");
       const fileset = await vision.FilesetResolver.forVisionTasks(WASM);
-      landmarkerRef.current = (await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      })) as never;
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: isMobile ? 720 : 1280 },
-          height: { ideal: isMobile ? 480 : 720 },
-          frameRate: { ideal: isMobile ? 24 : 30 },
-        },
-        audio: false,
-      });
+      const makeLandmarker = (delegate: "GPU" | "CPU") =>
+        vision.PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: MODEL, delegate },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+      try {
+        landmarkerRef.current = (await makeLandmarker("GPU")) as never;
+      } catch (gpuErr) {
+        // Many mobile browsers have no usable WebGPU/WebGL delegate.
+        console.warn("GPU delegate unavailable, falling back to CPU", gpuErr);
+        landmarkerRef.current = (await makeLandmarker("CPU")) as never;
+      }
+
+      facingRef.current = which;
+      setFacing(which);
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: which },
+            width: { ideal: isMobile ? 720 : 1280 },
+            height: { ideal: isMobile ? 1280 : 720 },
+            frameRate: { ideal: isMobile ? 24 : 30 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Some phones reject resolution hints — retry with the bare minimum.
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       const video = videoRef.current!;
       video.srcObject = stream;
-      await video.play();
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      if (video.readyState < 1) {
+        await new Promise<void>((resolve) => {
+          const done = () => resolve();
+          video.addEventListener("loadedmetadata", done, { once: true });
+          setTimeout(done, 4000);
+        });
+      }
+      try {
+        await video.play();
+      } catch (playErr) {
+        console.warn("Autoplay blocked, retrying", playErr);
+        await video.play().catch(() => undefined);
+      }
       setStatus("live");
       setMessage("");
 
