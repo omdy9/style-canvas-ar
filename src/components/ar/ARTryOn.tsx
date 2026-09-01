@@ -116,10 +116,14 @@ export default function ARTryOn() {
 
   const scan = useCallback(async () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !video.videoWidth) return;
     setScanning(true);
     try {
-      const result = captureGarment(video, latestPoseRef.current ?? undefined);
+      const result = captureGarment(
+        video,
+        latestPoseRef.current ?? undefined,
+        facingRef.current === "user",
+      );
       const blob = await result.blob;
       if (!blob) return;
       setPending({ dataUrl: result.dataUrl, blob, color: result.color });
