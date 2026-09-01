@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
 import { captureGarment } from "./capture";
 import { detectGarment, type ClothingCheck } from "./presence";
-import { Upload, Sparkles, Loader2 } from "lucide-react";
+import { Upload, Sparkles, Loader2, SwitchCamera } from "lucide-react";
 import { segmentClothingFromFile, isHFConfigured } from "./hfSegment";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -57,6 +57,9 @@ export default function ARTryOn() {
   const [scanning, setScanning] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const isMobile = useIsMobile();
+  const [facing, setFacing] = useState<"user" | "environment">("user");
+  const facingRef = useRef<"user" | "environment">("user");
+  const mirrored = facing === "user";
 
 
   const wornItems = useMemo(() => items.filter((i) => worn.has(i.id)), [items, worn]);
@@ -113,10 +116,14 @@ export default function ARTryOn() {
 
   const scan = useCallback(async () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !video.videoWidth) return;
     setScanning(true);
     try {
-      const result = captureGarment(video, latestPoseRef.current ?? undefined);
+      const result = captureGarment(
+        video,
+        latestPoseRef.current ?? undefined,
+        facingRef.current === "user",
+      );
       const blob = await result.blob;
       if (!blob) return;
       setPending({ dataUrl: result.dataUrl, blob, color: result.color });
@@ -182,29 +189,75 @@ export default function ARTryOn() {
     }
   };
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (which: "user" | "environment" = facingRef.current) => {
     setStatus("loading");
     setMessage("Warming up the mirror…");
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          window.isSecureContext === false
+            ? "Camera needs a secure (https) connection on mobile."
+            : "This browser doesn't support camera access.",
+        );
+      }
+
+      // Stop any stream still held from a previous session / camera flip.
+      const prev = videoRef.current?.srcObject as MediaStream | null;
+      prev?.getTracks().forEach((t) => t.stop());
+      landmarkerRef.current?.close();
+      landmarkerRef.current = null;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
       const vision = await import("@mediapipe/tasks-vision");
       const fileset = await vision.FilesetResolver.forVisionTasks(WASM);
-      landmarkerRef.current = (await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      })) as never;
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: isMobile ? 720 : 1280 },
-          height: { ideal: isMobile ? 480 : 720 },
-          frameRate: { ideal: isMobile ? 24 : 30 },
-        },
-        audio: false,
-      });
+      const makeLandmarker = (delegate: "GPU" | "CPU") =>
+        vision.PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: MODEL, delegate },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+      try {
+        landmarkerRef.current = (await makeLandmarker("GPU")) as never;
+      } catch (gpuErr) {
+        // Many mobile browsers have no usable WebGPU/WebGL delegate.
+        console.warn("GPU delegate unavailable, falling back to CPU", gpuErr);
+        landmarkerRef.current = (await makeLandmarker("CPU")) as never;
+      }
+
+      facingRef.current = which;
+      setFacing(which);
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: which },
+            width: { ideal: isMobile ? 720 : 1280 },
+            height: { ideal: isMobile ? 1280 : 720 },
+            frameRate: { ideal: isMobile ? 24 : 30 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Some phones reject resolution hints — retry with the bare minimum.
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       const video = videoRef.current!;
       video.srcObject = stream;
-      await video.play();
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      if (video.readyState < 1) {
+        await new Promise<void>((resolve) => {
+          const done = () => resolve();
+          video.addEventListener("loadedmetadata", done, { once: true });
+          setTimeout(done, 4000);
+        });
+      }
+      try {
+        await video.play();
+      } catch (playErr) {
+        console.warn("Autoplay blocked, retrying", playErr);
+        await video.play().catch(() => undefined);
+      }
       setStatus("live");
       setMessage("");
 
@@ -275,11 +328,25 @@ export default function ARTryOn() {
       setStatus("error");
       setMessage(
         err instanceof DOMException
-          ? "Camera access was blocked. Allow the camera and try again."
-          : "Couldn't start the AR mirror on this device.",
+          ? "Camera access was blocked. Allow camera permission in your browser settings and try again."
+          : err instanceof Error && err.message
+            ? err.message
+            : "Couldn't start the AR mirror on this device.",
       );
     }
   }, [scan, isMobile]);
+
+  // Phones pause the video element when the tab/app goes to the background.
+  useEffect(() => {
+    const resume = () => {
+      const video = videoRef.current;
+      if (document.visibilityState === "visible" && video?.srcObject && video.paused) {
+        void video.play().catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => document.removeEventListener("visibilitychange", resume);
+  }, []);
 
   const savePending = async () => {
     if (!pending) return;
@@ -339,8 +406,10 @@ export default function ARTryOn() {
         out.width = overlay.width;
         out.height = overlay.height;
         const ctx = out.getContext("2d")!;
-        ctx.translate(out.width, 0);
-        ctx.scale(-1, 1);
+        if (mirrored) {
+          ctx.translate(out.width, 0);
+          ctx.scale(-1, 1);
+        }
         ctx.drawImage(video, 0, 0, out.width, out.height);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(overlay, 0, 0);
@@ -375,13 +444,26 @@ export default function ARTryOn() {
           <video
             ref={videoRef}
             playsInline
+            autoPlay
             muted
-            className="absolute inset-0 h-full w-full scale-x-[-1] object-cover"
+            disablePictureInPicture
+            className={`absolute inset-0 h-full w-full object-cover ${mirrored ? "scale-x-[-1]" : ""}`}
           />
           <canvas
             ref={canvasRef}
-            className="pointer-events-none absolute inset-0 h-full w-full scale-x-[-1] object-cover"
+            className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${mirrored ? "scale-x-[-1]" : ""}`}
           />
+
+          {status === "live" && (
+            <button
+              onClick={() => void start(facing === "user" ? "environment" : "user")}
+              className="glass absolute right-3 top-3 z-10 flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 text-xs font-medium"
+              aria-label="Switch camera"
+            >
+              <SwitchCamera className="h-5 w-5" />
+            </button>
+          )}
+
 
           {status === "live" && mode === "scan" && !pending && (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
@@ -409,7 +491,7 @@ export default function ARTryOn() {
               </p>
               <div className="flex w-full max-w-sm flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
                 <button
-                  onClick={start}
+                  onClick={() => void start(facingRef.current)}
                   disabled={status === "loading"}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
