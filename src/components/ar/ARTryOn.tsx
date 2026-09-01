@@ -57,6 +57,9 @@ export default function ARTryOn() {
   const [scanning, setScanning] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const isMobile = useIsMobile();
+  const [facing, setFacing] = useState<"user" | "environment">("user");
+  const facingRef = useRef<"user" | "environment">("user");
+  const mirrored = facing === "user";
 
 
   const wornItems = useMemo(() => items.filter((i) => worn.has(i.id)), [items, worn]);
