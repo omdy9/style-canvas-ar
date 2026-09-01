@@ -328,11 +328,25 @@ export default function ARTryOn() {
       setStatus("error");
       setMessage(
         err instanceof DOMException
-          ? "Camera access was blocked. Allow the camera and try again."
-          : "Couldn't start the AR mirror on this device.",
+          ? "Camera access was blocked. Allow camera permission in your browser settings and try again."
+          : err instanceof Error && err.message
+            ? err.message
+            : "Couldn't start the AR mirror on this device.",
       );
     }
   }, [scan, isMobile]);
+
+  // Phones pause the video element when the tab/app goes to the background.
+  useEffect(() => {
+    const resume = () => {
+      const video = videoRef.current;
+      if (document.visibilityState === "visible" && video?.srcObject && video.paused) {
+        void video.play().catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => document.removeEventListener("visibilitychange", resume);
+  }, []);
 
   const savePending = async () => {
     if (!pending) return;
