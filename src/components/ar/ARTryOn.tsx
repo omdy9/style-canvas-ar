@@ -477,7 +477,7 @@ export default function ARTryOn() {
               </p>
               <div className="flex w-full max-w-sm flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
                 <button
-                  onClick={start}
+                  onClick={() => void start(facingRef.current)}
                   disabled={status === "loading"}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
