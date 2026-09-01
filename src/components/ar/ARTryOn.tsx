@@ -392,8 +392,10 @@ export default function ARTryOn() {
         out.width = overlay.width;
         out.height = overlay.height;
         const ctx = out.getContext("2d")!;
-        ctx.translate(out.width, 0);
-        ctx.scale(-1, 1);
+        if (mirrored) {
+          ctx.translate(out.width, 0);
+          ctx.scale(-1, 1);
+        }
         ctx.drawImage(video, 0, 0, out.width, out.height);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(overlay, 0, 0);
