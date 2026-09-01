@@ -430,13 +430,26 @@ export default function ARTryOn() {
           <video
             ref={videoRef}
             playsInline
+            autoPlay
             muted
-            className="absolute inset-0 h-full w-full scale-x-[-1] object-cover"
+            disablePictureInPicture
+            className={`absolute inset-0 h-full w-full object-cover ${mirrored ? "scale-x-[-1]" : ""}`}
           />
           <canvas
             ref={canvasRef}
-            className="pointer-events-none absolute inset-0 h-full w-full scale-x-[-1] object-cover"
+            className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${mirrored ? "scale-x-[-1]" : ""}`}
           />
+
+          {status === "live" && (
+            <button
+              onClick={() => void start(facing === "user" ? "environment" : "user")}
+              className="glass absolute right-3 top-3 z-10 flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 text-xs font-medium"
+              aria-label="Switch camera"
+            >
+              <SwitchCamera className="h-5 w-5" />
+            </button>
+          )}
+
 
           {status === "live" && mode === "scan" && !pending && (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
