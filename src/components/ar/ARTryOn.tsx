@@ -304,22 +304,29 @@ export default function ARTryOn() {
           }
         } else if (
           modeRef.current === "scan" &&
-          ts - lastClassifyRef.current > (isMobile ? 350 : 200)
+          !detectBusyRef.current &&
+          ts - lastClassifyRef.current > (isMobile ? 500 : 300)
         ) {
           lastClassifyRef.current = ts;
           latestPoseRef.current = lmk.detectForVideo(video, ts)?.landmarks?.[0] ?? null;
-          const check = detectGarment(video);
-          setGarmentCheck(check);
+          detectBusyRef.current = true;
+          void detectGarmentLive(video)
+            .then((check) => {
+              setGarmentCheck(check);
+              if (check.isClothing) stableHitsRef.current += 1;
+              else stableHitsRef.current = 0;
 
-          if (check.isClothing) stableHitsRef.current += 1;
-          else stableHitsRef.current = 0;
-
-          // ~750ms of a stable clothing read, nothing pending review yet → auto-scan.
-          if (stableHitsRef.current >= 3 && !pendingRef.current) {
-            stableHitsRef.current = 0;
-            void scan();
-          }
+              // A stable clothing read, nothing pending review yet → auto-scan.
+              if (stableHitsRef.current >= 3 && !pendingRef.current) {
+                stableHitsRef.current = 0;
+                void scan();
+              }
+            })
+            .finally(() => {
+              detectBusyRef.current = false;
+            });
         }
+
         rafRef.current = requestAnimationFrame(loop);
       };
       rafRef.current = requestAnimationFrame(loop);
