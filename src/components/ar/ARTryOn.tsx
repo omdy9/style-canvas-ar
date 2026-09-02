@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { drawGarment } from "./drawImage";
-import { captureGarment } from "./capture";
-import { detectGarment, type ClothingCheck } from "./presence";
+import { detectGarmentLive, scanGarment, getSegmenter, type GarmentPresence as ClothingCheck } from "./scanner";
 import { Upload, Sparkles, Loader2, SwitchCamera } from "lucide-react";
-import { segmentClothingFromFile, isHFConfigured } from "./hfSegment";
+
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import {
@@ -119,65 +118,49 @@ export default function ARTryOn() {
     if (!video || !video.videoWidth) return;
     setScanning(true);
     try {
-      const result = captureGarment(
-        video,
-        latestPoseRef.current ?? undefined,
-        facingRef.current === "user",
-      );
+      const result = await scanGarment(video, { mirror: facingRef.current === "user" });
       const blob = await result.blob;
       if (!blob) return;
       setPending({ dataUrl: result.dataUrl, blob, color: result.color });
       setDraftName("");
+      if (result.source === "fallback") {
+        toast.message("Captured without AI segmentation — check the cutout.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Scan failed. Try again with better lighting.");
     } finally {
       setScanning(false);
     }
   }, []);
-
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setProcessingUpload(true);
-    const usingAI = isHFConfigured();
-    const toastId = toast.loading(
-      usingAI
-        ? "AI is detecting and segmenting the garment…"
-        : "Processing image and extracting garment…"
-    );
+    const toastId = toast.loading("Detecting the garment…");
 
+    const url = URL.createObjectURL(file);
     try {
-      if (usingAI) {
-        // ── AI path: Hugging Face SegFormer ─────────────────────────────
-        const result = await segmentClothingFromFile(file);
-        const blob = await result.blob;
-        if (!blob) throw new Error("AI could not extract the garment.");
-
-        const label = result.labels.length
-          ? result.labels.map((l) => l.replace(/-/g, " ")).join(", ")
-          : "garment";
-
-        setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-        setDraftName(file.name.replace(/\.[^/.]+$/, ""));
-        toast.success(`Detected: ${label}`, { id: toastId });
-      } else {
-        // ── Fallback path: colour flood-fill ────────────────────────────
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.src = url;
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error("Failed to load image."));
-        });
-        const result = captureGarment(img, undefined, false);
-        const blob = await result.blob;
-        URL.revokeObjectURL(url);
-        if (!blob) throw new Error("Could not extract garment from the image.");
-        setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-        setDraftName(file.name.replace(/\.[^/.]+$/, ""));
-        toast.success("Garment captured!", { id: toastId });
-      }
+      const img = new Image();
+      img.src = url;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image."));
+      });
+      const result = await scanGarment(img);
+      const blob = await result.blob;
+      if (!blob) throw new Error("Could not extract the garment from this image.");
+      setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+      setDraftName(file.name.replace(/\.[^/.]+$/, ""));
+      toast.success(
+        result.source === "segmenter" ? "Garment detected and cut out!" : "Garment captured!",
+        { id: toastId },
+      );
     } catch (err) {
+      console.error(err);
+
       console.error(err);
       toast.error(
         err instanceof Error ? err.message : "Failed to process image.",
@@ -304,22 +287,29 @@ export default function ARTryOn() {
           }
         } else if (
           modeRef.current === "scan" &&
-          ts - lastClassifyRef.current > (isMobile ? 350 : 200)
+          !detectBusyRef.current &&
+          ts - lastClassifyRef.current > (isMobile ? 500 : 300)
         ) {
           lastClassifyRef.current = ts;
           latestPoseRef.current = lmk.detectForVideo(video, ts)?.landmarks?.[0] ?? null;
-          const check = detectGarment(video);
-          setGarmentCheck(check);
+          detectBusyRef.current = true;
+          void detectGarmentLive(video)
+            .then((check) => {
+              setGarmentCheck(check);
+              if (check.isClothing) stableHitsRef.current += 1;
+              else stableHitsRef.current = 0;
 
-          if (check.isClothing) stableHitsRef.current += 1;
-          else stableHitsRef.current = 0;
-
-          // ~750ms of a stable clothing read, nothing pending review yet → auto-scan.
-          if (stableHitsRef.current >= 3 && !pendingRef.current) {
-            stableHitsRef.current = 0;
-            void scan();
-          }
+              // A stable clothing read, nothing pending review yet → auto-scan.
+              if (stableHitsRef.current >= 3 && !pendingRef.current) {
+                stableHitsRef.current = 0;
+                void scan();
+              }
+            })
+            .finally(() => {
+              detectBusyRef.current = false;
+            });
         }
+
         rafRef.current = requestAnimationFrame(loop);
       };
       rafRef.current = requestAnimationFrame(loop);
