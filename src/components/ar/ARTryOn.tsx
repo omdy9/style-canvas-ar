@@ -118,65 +118,49 @@ export default function ARTryOn() {
     if (!video || !video.videoWidth) return;
     setScanning(true);
     try {
-      const result = captureGarment(
-        video,
-        latestPoseRef.current ?? undefined,
-        facingRef.current === "user",
-      );
+      const result = await scanGarment(video, { mirror: facingRef.current === "user" });
       const blob = await result.blob;
       if (!blob) return;
       setPending({ dataUrl: result.dataUrl, blob, color: result.color });
       setDraftName("");
+      if (result.source === "fallback") {
+        toast.message("Captured without AI segmentation — check the cutout.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Scan failed. Try again with better lighting.");
     } finally {
       setScanning(false);
     }
   }, []);
-
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setProcessingUpload(true);
-    const usingAI = isHFConfigured();
-    const toastId = toast.loading(
-      usingAI
-        ? "AI is detecting and segmenting the garment…"
-        : "Processing image and extracting garment…"
-    );
+    const toastId = toast.loading("Detecting the garment…");
 
+    const url = URL.createObjectURL(file);
     try {
-      if (usingAI) {
-        // ── AI path: Hugging Face SegFormer ─────────────────────────────
-        const result = await segmentClothingFromFile(file);
-        const blob = await result.blob;
-        if (!blob) throw new Error("AI could not extract the garment.");
-
-        const label = result.labels.length
-          ? result.labels.map((l) => l.replace(/-/g, " ")).join(", ")
-          : "garment";
-
-        setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-        setDraftName(file.name.replace(/\.[^/.]+$/, ""));
-        toast.success(`Detected: ${label}`, { id: toastId });
-      } else {
-        // ── Fallback path: colour flood-fill ────────────────────────────
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.src = url;
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error("Failed to load image."));
-        });
-        const result = captureGarment(img, undefined, false);
-        const blob = await result.blob;
-        URL.revokeObjectURL(url);
-        if (!blob) throw new Error("Could not extract garment from the image.");
-        setPending({ dataUrl: result.dataUrl, blob, color: result.color });
-        setDraftName(file.name.replace(/\.[^/.]+$/, ""));
-        toast.success("Garment captured!", { id: toastId });
-      }
+      const img = new Image();
+      img.src = url;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image."));
+      });
+      const result = await scanGarment(img);
+      const blob = await result.blob;
+      if (!blob) throw new Error("Could not extract the garment from this image.");
+      setPending({ dataUrl: result.dataUrl, blob, color: result.color });
+      setDraftName(file.name.replace(/\.[^/.]+$/, ""));
+      toast.success(
+        result.source === "segmenter" ? "Garment detected and cut out!" : "Garment captured!",
+        { id: toastId },
+      );
     } catch (err) {
+      console.error(err);
+
       console.error(err);
       toast.error(
         err instanceof Error ? err.message : "Failed to process image.",
